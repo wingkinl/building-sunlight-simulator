@@ -615,34 +615,63 @@
         if (useAdvanced) {
             const getUnitAt = computeAdvancedUnitRegions(building);
             if (typeof getUnitAt === 'function') {
+                const cutLines = building.cutLines;
                 for (let floor = 0; floor < floors; floor++) {
                     const windowHeight = floor * floorHeight + floorHeight * 0.4 + 1.2;
                     for (const seg of segments) {
                         if (seg.len < 0.1) continue;
-                        const midX = (seg.start.x + seg.end.x) * 0.5;
-                        const midY = (seg.start.y + seg.end.y) * 0.5;
-                        const dx = seg.end.x - seg.start.x;
-                        const dy = seg.end.y - seg.start.y;
-                        const tangent = seg.len > 1e-6
-                            ? { x: dx / seg.len, y: dy / seg.len }
-                            : { x: 1, y: 0 };
-                        const unitIdx = getUnitAt(midX, midY);
 
-                        points.push({
-                            buildingIndex,
-                            buildingName: building.name || `建筑${buildingIndex + 1}`,
-                            floor: floor + 1,
-                            unit: Math.max(0, Math.min(units - 1, unitIdx)) + 1,
-                            x: midX + seg.outward.x * 0.5,
-                            y: midY + seg.outward.y * 0.5,
-                            z: windowHeight,
-                            wallDataX: midX,
-                            wallDataY: midY,
-                            outward: seg.outward,
-                            tangent: tangent,
-                            cellWidth: seg.len * 0.95,
-                            sunlightHours: 0
-                        });
+                        // Sub-split this wall edge at cut-line intersection points
+                        const ts = [0, 1];
+                        for (const line of cutLines) {
+                            if (!Array.isArray(line) || line.length < 2) continue;
+                            for (let li = 0; li < line.length - 1; li++) {
+                                const c1 = line[li], c2 = line[li + 1];
+                                const cdx = c2.x - c1.x, cdy = c2.y - c1.y;
+                                const edx = seg.end.x - seg.start.x, edy = seg.end.y - seg.start.y;
+                                const den = cdx * edy - cdy * edx;
+                                if (Math.abs(den) < 1e-12) continue;
+                                const tCut = ((seg.start.x - c1.x) * edy - (seg.start.y - c1.y) * edx) / den;
+                                const sEdge = ((seg.start.x - c1.x) * cdy - (seg.start.y - c1.y) * cdx) / den;
+                                if (tCut < -0.001 || tCut > 1.001 || sEdge < 0.005 || sEdge > 0.995) continue;
+                                ts.push(Math.max(0, Math.min(1, sEdge)));
+                            }
+                        }
+                        ts.sort((a, b) => a - b);
+                        const uTs = [ts[0]];
+                        for (let i = 1; i < ts.length; i++) {
+                            if (ts[i] - uTs[uTs.length - 1] > 1e-6) uTs.push(ts[i]);
+                        }
+
+                        for (let i = 0; i < uTs.length - 1; i++) {
+                            const tMid = (uTs[i] + uTs[i + 1]) * 0.5;
+                            const subLen = (uTs[i + 1] - uTs[i]) * seg.len;
+                            if (subLen < 0.1) continue;
+                            const midX = seg.start.x + tMid * (seg.end.x - seg.start.x);
+                            const midY = seg.start.y + tMid * (seg.end.y - seg.start.y);
+                            const dx = seg.end.x - seg.start.x;
+                            const dy = seg.end.y - seg.start.y;
+                            const tangent = seg.len > 1e-6
+                                ? { x: dx / seg.len, y: dy / seg.len }
+                                : { x: 1, y: 0 };
+                            const unitIdx = getUnitAt(midX, midY);
+
+                            points.push({
+                                buildingIndex,
+                                buildingName: building.name || `建筑${buildingIndex + 1}`,
+                                floor: floor + 1,
+                                unit: Math.max(0, Math.min(units - 1, unitIdx)) + 1,
+                                x: midX + seg.outward.x * 0.5,
+                                y: midY + seg.outward.y * 0.5,
+                                z: windowHeight,
+                                wallDataX: midX,
+                                wallDataY: midY,
+                                outward: seg.outward,
+                                tangent: tangent,
+                                cellWidth: subLen * 0.95,
+                                sunlightHours: 0
+                            });
+                        }
                     }
                 }
                 return points;

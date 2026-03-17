@@ -178,7 +178,9 @@
     let customDeclination = null; // 存储自定义日期的赤纬角
 
     // ========== 纹理与材质工具 ==========
-    function createFacadeTexture(floors, unitsPerFloor, unitRatiosPerFloor) {
+    // advancedDividerUs: optional array of U-values [0..1] where cut-line dividers
+    // should appear on the facade (used for advanced split mode instead of ratios).
+    function createFacadeTexture(floors, unitsPerFloor, unitRatiosPerFloor, advancedDividerUs) {
         const floorPx = 28;
         const width = 512;
         const height = Math.max(floors * floorPx, 4);
@@ -194,24 +196,41 @@
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, width, height);
 
+        const useAdvancedDividers = Array.isArray(advancedDividerUs) && advancedDividerUs.length > 0;
+        // When advancedDividerUs is any array (even empty), we are in advanced split mode
+        // and must NOT fall back to ratio-based dividers.
+        const isAdvancedMode = Array.isArray(advancedDividerUs);
+
         for (let f = 0; f < floors; f++) {
             const y0 = Math.floor(f * floorPx);
             const y1 = Math.floor((f + 1) * floorPx);
             const bandH = y1 - y0;
 
-            const nUnits = Math.max(1, unitsPerFloor[f] || 1);
-            if (nUnits > 1) {
-                const ratios = normalizeUnitRatios(unitRatiosPerFloor?.[f], nUnits);
-                let acc = 0;
-                for (let i = 0; i < nUnits - 1; i++) {
-                    const r = ratios ? ratios[i] : (1.0 / nUnits);
-                    acc += r;
-                    const x = Math.round(acc * width);
-                    // Use a cool cyan accent so unit dividers stay readable against the facade and warm heatmap colors.
+            if (useAdvancedDividers) {
+                // Draw dividers at cut-line intersection positions
+                for (const u of advancedDividerUs) {
+                    const x = Math.round(u * width);
+                    if (x <= 1 || x >= width - 1) continue;
                     ctx.fillStyle = 'rgba(0,235,210,0.9)';
                     ctx.fillRect(x - 2, y0, 4, bandH);
                     ctx.fillStyle = 'rgba(180,255,245,0.35)';
                     ctx.fillRect(x + 2, y0, 1, bandH);
+                }
+            } else if (!isAdvancedMode) {
+                const nUnits = Math.max(1, unitsPerFloor[f] || 1);
+                if (nUnits > 1) {
+                    const ratios = normalizeUnitRatios(unitRatiosPerFloor?.[f], nUnits);
+                    let acc = 0;
+                    for (let i = 0; i < nUnits - 1; i++) {
+                        const r = ratios ? ratios[i] : (1.0 / nUnits);
+                        acc += r;
+                        const x = Math.round(acc * width);
+                        // Use a cool cyan accent so unit dividers stay readable against the facade and warm heatmap colors.
+                        ctx.fillStyle = 'rgba(0,235,210,0.9)';
+                        ctx.fillRect(x - 2, y0, 4, bandH);
+                        ctx.fillStyle = 'rgba(180,255,245,0.35)';
+                        ctx.fillRect(x + 2, y0, 1, bandH);
+                    }
                 }
             }
 
@@ -359,6 +378,162 @@
         return cleaned.map(v => v / sum);
     }
 
+    /**
+     * For advanced (free-line) split: rasterize the 2D footprint + cutLines onto
+     * a small canvas, flood-fill connected regions, then map each region to a unit
+     * index via unitCenters. Returns getUnitAtPoint(x,y) → 0-based unit index,
+     * or null if the building has no usable advanced split data.
+     *
+     * All coordinates are in the same world/shape coordinate system.
+     */
+    function computeAdvancedUnitRegions(building) {
+        const shape = building.shape;
+        const cutLines = building.cutLines;
+        const unitCenters = building.unitCenters;
+        const units = Math.max(1, parseInt(building.units || 1, 10));
+        if (!Array.isArray(shape) || shape.length < 3) return null;
+        if (!Array.isArray(cutLines) || cutLines.length === 0) return null;
+
+        // Bounding box of the shape
+        let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+        for (const p of shape) {
+            if (p.x < sMinX) sMinX = p.x;
+            if (p.x > sMaxX) sMaxX = p.x;
+            if (p.y < sMinY) sMinY = p.y;
+            if (p.y > sMaxY) sMaxY = p.y;
+        }
+        const spanX = Math.max(1e-6, sMaxX - sMinX);
+        const spanY = Math.max(1e-6, sMaxY - sMinY);
+        const pad = 4;
+        const maxDim = 256;
+        const scale = Math.min((maxDim - pad * 2) / spanX, (maxDim - pad * 2) / spanY);
+        const W = Math.max(64, Math.round(spanX * scale + pad * 2));
+        const H = Math.max(64, Math.round(spanY * scale + pad * 2));
+
+        const toCanvas = (p) => ({
+            x: (p.x - sMinX) * scale + pad,
+            y: (p.y - sMinY) * scale + pad
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, W, H);
+
+        // Draw polygon fill (white = interior)
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        const c0 = toCanvas(shape[0]);
+        ctx.moveTo(c0.x, c0.y);
+        for (let i = 1; i < shape.length; i++) {
+            const ci = toCanvas(shape[i]);
+            ctx.lineTo(ci.x, ci.y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Draw cut lines as black barriers
+        const lineWidth = Math.max(2, Math.round(Math.min(W, H) / 80));
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = lineWidth;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        for (const line of cutLines) {
+            if (!Array.isArray(line) || line.length < 2) continue;
+            ctx.beginPath();
+            const s = toCanvas(line[0]);
+            ctx.moveTo(s.x, s.y);
+            for (let i = 1; i < line.length; i++) {
+                const pt = toCanvas(line[i]);
+                ctx.lineTo(pt.x, pt.y);
+            }
+            ctx.stroke();
+        }
+
+        // Read pixels and classify: 0 = unfilled interior, 65535 = outside/barrier
+        const imgData = ctx.getImageData(0, 0, W, H).data;
+        const state = new Uint16Array(W * H);
+        for (let i = 0, idx = 0; i < imgData.length; i += 4, idx++) {
+            if (imgData[i + 3] < 10) { state[idx] = 65535; continue; }               // transparent = outside
+            if (imgData[i] < 200 && imgData[i + 1] < 200 && imgData[i + 2] < 200) {  // dark = barrier
+                state[idx] = 65535;
+            }
+            // else stays 0 = white interior
+        }
+
+        // Flood-fill each connected region, track centroid
+        const queue = new Int32Array(W * H);
+        const regions = []; // {id, cx, cy}
+        let regionCount = 0;
+        for (let idx = 0; idx < state.length; idx++) {
+            if (state[idx] !== 0) continue;
+            regionCount++;
+            let head = 0, tail = 0;
+            let sumX = 0, sumY = 0, count = 0;
+            queue[tail++] = idx;
+            state[idx] = regionCount;
+            while (head < tail) {
+                const cur = queue[head++];
+                const cx = cur % W, cy = (cur / W) | 0;
+                sumX += cx; sumY += cy; count++;
+                if (cx > 0     && state[cur - 1]  === 0) { state[cur - 1]  = regionCount; queue[tail++] = cur - 1; }
+                if (cx < W - 1 && state[cur + 1]  === 0) { state[cur + 1]  = regionCount; queue[tail++] = cur + 1; }
+                if (cy > 0     && state[cur - W]  === 0) { state[cur - W]  = regionCount; queue[tail++] = cur - W; }
+                if (cy < H - 1 && state[cur + W]  === 0) { state[cur + W]  = regionCount; queue[tail++] = cur + W; }
+            }
+            if (count > 0) {
+                // Convert centroid back to world coords
+                const wcx = (sumX / count - pad) / scale + sMinX;
+                const wcy = (sumY / count - pad) / scale + sMinY;
+                regions.push({ id: regionCount, cx: wcx, cy: wcy });
+            }
+        }
+        if (regionCount === 0) return null;
+
+        // Map region → unit via unitCenters
+        const regionToUnit = new Map();
+        if (Array.isArray(unitCenters)) {
+            for (const center of unitCenters) {
+                const c = toCanvas(center);
+                const sx = Math.round(c.x), sy = Math.round(c.y);
+                if (sx < 0 || sy < 0 || sx >= W || sy >= H) continue;
+                const rid = state[sy * W + sx];
+                if (rid > 0 && rid !== 65535) {
+                    regionToUnit.set(rid, Math.max(0, Math.min(units - 1, (parseInt(center.unitIndex, 10) || 1) - 1)));
+                }
+            }
+        }
+        // Assign unmapped regions by X-coordinate order
+        const ordered = regions.slice().sort((a, b) => a.cx - b.cx);
+        let nextUnit = 0;
+        for (const r of ordered) {
+            if (!regionToUnit.has(r.id)) {
+                regionToUnit.set(r.id, Math.min(units - 1, nextUnit++));
+            }
+        }
+
+        // Return lookup function
+        return function getUnitAtPoint(x, y) {
+            const c = toCanvas({ x, y });
+            const sx = Math.round(c.x), sy = Math.round(c.y);
+            let rid = 0;
+            if (sx >= 0 && sy >= 0 && sx < W && sy < H) {
+                rid = state[sy * W + sx];
+            }
+            // If point lands on a barrier or outside, find nearest region centroid
+            if (rid <= 0 || rid === 65535) {
+                let best = Infinity, bestId = ordered[0]?.id || 1;
+                for (const r of ordered) {
+                    const d = (x - r.cx) * (x - r.cx) + (y - r.cy) * (y - r.cy);
+                    if (d < best) { best = d; bestId = r.id; }
+                }
+                rid = bestId;
+            }
+            return regionToUnit.get(rid) || 0;
+        };
+    }
+
     function clampAngleDeg(deg) {
         const d = Number(deg);
         if (!isFinite(d)) return 0;
@@ -433,6 +608,46 @@
             segments.push({ start, end, len, outward, pA: a, pB: b });
         }
         const spanProj = maxProj - minProj;
+
+        // --- Advanced (free-line) split: use 2D region query instead of axis projection ---
+        const useAdvanced = !!building.advancedSplit
+            && Array.isArray(building.cutLines) && building.cutLines.length > 0;
+        if (useAdvanced) {
+            const getUnitAt = computeAdvancedUnitRegions(building);
+            if (typeof getUnitAt === 'function') {
+                for (let floor = 0; floor < floors; floor++) {
+                    const windowHeight = floor * floorHeight + floorHeight * 0.4 + 1.2;
+                    for (const seg of segments) {
+                        if (seg.len < 0.1) continue;
+                        const midX = (seg.start.x + seg.end.x) * 0.5;
+                        const midY = (seg.start.y + seg.end.y) * 0.5;
+                        const dx = seg.end.x - seg.start.x;
+                        const dy = seg.end.y - seg.start.y;
+                        const tangent = seg.len > 1e-6
+                            ? { x: dx / seg.len, y: dy / seg.len }
+                            : { x: 1, y: 0 };
+                        const unitIdx = getUnitAt(midX, midY);
+
+                        points.push({
+                            buildingIndex,
+                            buildingName: building.name || `建筑${buildingIndex + 1}`,
+                            floor: floor + 1,
+                            unit: Math.max(0, Math.min(units - 1, unitIdx)) + 1,
+                            x: midX + seg.outward.x * 0.5,
+                            y: midY + seg.outward.y * 0.5,
+                            z: windowHeight,
+                            wallDataX: midX,
+                            wallDataY: midY,
+                            outward: seg.outward,
+                            tangent: tangent,
+                            cellWidth: seg.len * 0.95,
+                            sunlightHours: 0
+                        });
+                    }
+                }
+                return points;
+            }
+        }
 
         for (let floor = 0; floor < floors; floor++) {
             const windowHeight = floor * floorHeight + floorHeight * 0.4 + 1.2;
@@ -998,7 +1213,10 @@
 
             let mesh;
             if (own) {
-                const sideTexture = createFacadeTexture(floors, unitsPerFloor, b.unitRatiosPerFloor);
+                // For advanced split, suppress ratio-based texture dividers;
+                // we draw 3D line geometry instead (see below).
+                const advSplit = b.advancedSplit && Array.isArray(b.cutLines) && b.cutLines.length > 0;
+                const sideTexture = createFacadeTexture(floors, unitsPerFloor, b.unitRatiosPerFloor, advSplit ? [] : null);
                 const sideMaterial = new THREE.MeshStandardMaterial({
                     map: sideTexture,
                     color: CONFIG.MATERIALS.BUILDING_COLOR,
@@ -1037,6 +1255,45 @@
             if (label) {
                 label.renderOrder = 999;
                 node.add(label);
+            }
+
+            // Advanced split: draw divider lines as 3D geometry at exact
+            // cutLine–wall intersection points so each line appears only
+            // on the wall face it actually crosses.
+            if (own && b.advancedSplit && Array.isArray(b.cutLines) && b.cutLines.length > 0 && b.shape.length >= 3) {
+                for (const line of b.cutLines) {
+                    if (!Array.isArray(line) || line.length < 2) continue;
+                    for (let li = 0; li < line.length - 1; li++) {
+                        const c1 = line[li], c2 = line[li + 1];
+                        for (let si = 0; si < b.shape.length; si++) {
+                            const e1 = b.shape[si];
+                            const e2 = b.shape[(si + 1) % b.shape.length];
+                            const dx1 = c2.x - c1.x, dy1 = c2.y - c1.y;
+                            const dx2 = e2.x - e1.x, dy2 = e2.y - e1.y;
+                            const denom = dx1 * dy2 - dy1 * dx2;
+                            if (Math.abs(denom) < 1e-12) continue;
+                            const t = ((e1.x - c1.x) * dy2 - (e1.y - c1.y) * dx2) / denom;
+                            const s = ((e1.x - c1.x) * dy1 - (e1.y - c1.y) * dx1) / denom;
+                            if (t < -0.001 || t > 1.001 || s < 0.005 || s > 0.995) continue;
+                            // Intersection point on the wall edge (in shape coords)
+                            const ix = e1.x + s * dx2;
+                            const iy = e1.y + s * dy2;
+                            // Vertical line from ground to roof.
+                            // World coords: X=shapeX, Y=height, Z=shapeY (same as label positioning).
+                            const geom = new THREE.BufferGeometry().setFromPoints([
+                                new THREE.Vector3(ix, 0, iy),
+                                new THREE.Vector3(ix, totalHeight, iy)
+                            ]);
+                            const mat = new THREE.LineBasicMaterial({
+                                color: 0x00ebd2, linewidth: 2,
+                                transparent: true, opacity: 0.92,
+                                depthTest: true
+                            });
+                            const ln = new THREE.Line(geom, mat);
+                            node.add(ln);
+                        }
+                    }
+                }
             }
         });
 

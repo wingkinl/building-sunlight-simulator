@@ -1,0 +1,87 @@
+{
+  "version": "3.0.0",
+  "latitude": 36.65,
+  "scaleRatio": 0.13355991084538069,
+  "origin": {
+    "x": 661.5597667638484,
+    "y": 751.960641399417
+  },
+  "buildings": [
+    {
+      "name": "1号楼",
+      "floors": 18,
+      "floorHeight": 3,
+      "units": 2,
+      "totalHeight": 54,
+      "isThisCommunity": true,
+      "shape": [
+        {
+          "x": -62.62,
+          "y": -28.84
+        },
+        {
+          "x": -59.55,
+          "y": 29.33
+        },
+        {
+          "x": 63.1,
+          "y": 29.01
+        },
+        {
+          "x": 59.55,
+          "y": -28.84
+        },
+        {
+          "x": -63.1,
+          "y": -29.33
+        }
+      ],
+      "center": {
+        "x": -12.52,
+        "y": -5.73
+      },
+      "unitRatiosPerFloor": [
+        [
+          0.5,
+          0.5
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "unitSplitAngleDeg": 0,
+      "advancedSplit": true,
+      "cutLines": [
+        [
+          {
+            "x": -57.02,
+            "y": -32.15
+          },
+          {
+            "x": 16.94,
+            "y": 32.15
+          },
+          {
+            "x": 16.94,
+            "y": 32.15
+          }
+        ]
+      ],
+      "unitCenters": []
+    }
+  ]
+}

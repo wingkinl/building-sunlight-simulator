@@ -870,8 +870,18 @@
                     unitRatiosPerFloor,
                     unitSplitAngleDeg: (typeof b.unitSplitAngleDeg === 'number' && isFinite(b.unitSplitAngleDeg)) ? clampAngleDeg(b.unitSplitAngleDeg) : undefined,
                     advancedSplit: !!b.advancedSplit,
-                    cutLines: Array.isArray(b.cutLines) ? deepClone(b.cutLines) : [],
-                    unitCenters: Array.isArray(b.unitCenters) ? deepClone(b.unitCenters) : []
+                    // Transform cutLines/unitCenters from editor-pixel to world coords (same as shape)
+                    cutLines: Array.isArray(b.cutLines) ? b.cutLines.map(line =>
+                        Array.isArray(line) ? line.map(p => ({
+                            x: round2((p.x - centerX) * scaleRatio),
+                            y: round2((p.y - centerY) * scaleRatio)
+                        })) : []
+                    ) : [],
+                    unitCenters: Array.isArray(b.unitCenters) ? b.unitCenters.map(c => ({
+                        x: round2((c.x - centerX) * scaleRatio),
+                        y: round2((c.y - centerY) * scaleRatio),
+                        unitIndex: c.unitIndex
+                    })) : []
                 };
             })
         };
@@ -938,8 +948,18 @@
                 unitRatiosPerFloor: Array.isArray(b?.unitRatiosPerFloor) ? b.unitRatiosPerFloor : null,
                 unitSplitAngleDeg: (typeof b?.unitSplitAngleDeg === 'number' && isFinite(b.unitSplitAngleDeg)) ? clampAngleDeg(b.unitSplitAngleDeg) : undefined,
                 advancedSplit: !!b?.advancedSplit,
-                cutLines: Array.isArray(b?.cutLines) ? deepClone(b.cutLines) : [],
-                unitCenters: Array.isArray(b?.unitCenters) ? deepClone(b.unitCenters) : []
+                // Inverse-transform cutLines/unitCenters from world coords back to editor-pixel
+                cutLines: Array.isArray(b?.cutLines) ? b.cutLines.map(line =>
+                    Array.isArray(line) ? line.map(p => ({
+                        x: ox + (Number(p?.x) || 0) / sr,
+                        y: oy + (Number(p?.y) || 0) / sr
+                    })) : []
+                ) : [],
+                unitCenters: Array.isArray(b?.unitCenters) ? b.unitCenters.map(c => ({
+                    x: ox + (Number(c?.x) || 0) / sr,
+                    y: oy + (Number(c?.y) || 0) / sr,
+                    unitIndex: c?.unitIndex
+                })) : []
             });
         }
 

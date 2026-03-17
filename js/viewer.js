@@ -1555,7 +1555,6 @@
         if (intersects.length > 0) {
             const obj = intersects[0].object;
             if (obj.userData.type === 'heatmapCell') {
-                renderer.domElement.style.cursor = 'pointer';
                 if (obj !== lastHoveredCell) {
                     lastHoveredCell = obj;
                     showUnitInfo(obj.userData);

@@ -207,10 +207,11 @@
                     const r = ratios ? ratios[i] : (1.0 / nUnits);
                     acc += r;
                     const x = Math.round(acc * width);
-                    ctx.fillStyle = 'rgba(35,45,60,0.6)';
-                    ctx.fillRect(x - 1, y0, 2, bandH);
-                    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-                    ctx.fillRect(x + 1, y0, 1, bandH);
+                    // Use a cool cyan accent so unit dividers stay readable against the facade and warm heatmap colors.
+                    ctx.fillStyle = 'rgba(0,235,210,0.9)';
+                    ctx.fillRect(x - 2, y0, 4, bandH);
+                    ctx.fillStyle = 'rgba(180,255,245,0.35)';
+                    ctx.fillRect(x + 2, y0, 1, bandH);
                 }
             }
 

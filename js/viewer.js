@@ -1525,6 +1525,43 @@
         }
     }
 
+    // ========== 悬停交互 ==========
+    const raycasterHover = new THREE.Raycaster();
+    const mouseHover = new THREE.Vector2();
+    let lastHoveredCell = null;
+
+    function onCanvasMouseMove(event) {
+        if (!sunlightResults || !showHeatmap) {
+            if (renderer.domElement.style.cursor === 'pointer') {
+                renderer.domElement.style.cursor = '';
+            }
+            return;
+        }
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouseHover.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouseHover.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycasterHover.setFromCamera(mouseHover, camera);
+        const intersects = raycasterHover.intersectObjects(heatmapGroup.children, false);
+
+        if (intersects.length > 0) {
+            const obj = intersects[0].object;
+            if (obj.userData.type === 'heatmapCell') {
+                renderer.domElement.style.cursor = 'pointer';
+                if (obj !== lastHoveredCell) {
+                    lastHoveredCell = obj;
+                    showUnitInfo(obj.userData);
+                }
+                return;
+            }
+        }
+
+        renderer.domElement.style.cursor = '';
+        lastHoveredCell = null;
+        // Panel remains visible when cursor moves off a cell,
+        // consistent with click behavior; user can close it manually.
+
     // ========== UI 绑定 ==========
     function bindUI() {
         // 语言切换
@@ -1639,6 +1676,9 @@
         renderer.domElement.addEventListener('click', (e) => {
             if (!touchHandled) onCanvasClick(e);
         });
+
+        // 悬停画布显示热力图结果面板
+        renderer.domElement.addEventListener('mousemove', onCanvasMouseMove);
 
         // 侧边栏收起/展开
         const controlsPanel = document.getElementById('controls');

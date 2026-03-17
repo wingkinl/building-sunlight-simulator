@@ -552,6 +552,13 @@
         return (p?.x || 0) * (axis?.x || 0) + (p?.y || 0) * (axis?.y || 0);
     }
 
+    function getHeatmapCellWidth(subLen) {
+        // Use a fixed inset on both sides so the visual gap stays centered on
+        // the actual split location even when adjacent segment lengths differ.
+        const sideInset = 0.12;
+        return Math.max(0.06, subLen - sideInset * 2);
+    }
+
     // ========== 日照分析核心功能 ==========
 
     /**
@@ -668,7 +675,7 @@
                                 wallDataY: midY,
                                 outward: seg.outward,
                                 tangent: tangent,
-                                cellWidth: subLen * 0.95,
+                                cellWidth: getHeatmapCellWidth(subLen),
                                 sunlightHours: 0
                             });
                         }
@@ -747,7 +754,7 @@
                         wallDataY: midY,
                         outward: seg.outward,
                         tangent: tangent,
-                        cellWidth: subLen * 0.95,
+                        cellWidth: getHeatmapCellWidth(subLen),
                         sunlightHours: 0
                     });
                 }

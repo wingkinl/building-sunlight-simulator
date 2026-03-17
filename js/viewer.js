@@ -1561,6 +1561,7 @@
         lastHoveredCell = null;
         // Panel remains visible when cursor moves off a cell,
         // consistent with click behavior; user can close it manually.
+    }
 
     // ========== UI 绑定 ==========
     function bindUI() {

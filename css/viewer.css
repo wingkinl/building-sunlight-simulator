@@ -30,15 +30,45 @@ body {
     right: 16px;
     width: 340px;
     max-width: calc(100vw - 32px);
-    background: var(--ui-bg);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(241, 248, 255, 0.24));
     padding: 16px;
     padding-top: 52px;
     border-radius: var(--radius);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow: 0 24px 50px rgba(31, 64, 104, 0.2), 0 10px 24px rgba(15, 30, 58, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.65);
     z-index: 10;
-    backdrop-filter: saturate(180%) blur(8px);
+    backdrop-filter: saturate(185%) blur(18px);
+    -webkit-backdrop-filter: saturate(185%) blur(18px);
     transition: width .3s ease, height .3s ease, padding .3s ease;
     overflow: hidden;
+    isolation: isolate;
+}
+
+.panel-content {
+    position: relative;
+    z-index: 1;
+}
+
+#controls::before,
+#controls::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+#controls::before {
+    background:
+        radial-gradient(130px 90px at 84% 10%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 70%),
+        radial-gradient(220px 160px at 8% 100%, rgba(154, 214, 255, 0.26), rgba(154, 214, 255, 0) 72%);
+    opacity: 0.95;
+}
+
+#controls::after {
+    inset: 1px;
+    border-radius: calc(var(--radius) - 1px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: inset 0 -18px 30px rgba(188, 227, 255, 0.14), inset 0 18px 26px rgba(255, 255, 255, 0.22);
 }
 
 .panel-content {

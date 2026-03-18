@@ -20,6 +20,8 @@
     const jsonImportInput = document.getElementById('jsonImportInput');
     const btnImportJson = document.getElementById('btnImportJson');
     const exportFilenameEl = document.getElementById('exportFilename');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarResizer = document.getElementById('sidebarResizer');
 
     const splitModalOverlay = document.getElementById('splitModalOverlay');
     const splitModalClose = document.getElementById('splitModalClose');
@@ -75,6 +77,12 @@
     let isDragging = false;
     let lastMouseX = 0;
     let lastMouseY = 0;
+    let sidebarResizeState = {
+        active: false,
+        startX: 0,
+        startWidth: 0,
+        pointerId: null
+    };
 
     let splitState = {
         open: false,
@@ -102,6 +110,8 @@
     // 使用配置常量
     const CLOSE_EPS_BASE = CONFIG.EDITOR.CLOSE_EPSILON;
     const SANITIZE_EPS = CONFIG.EDITOR.SANITIZE_EPSILON;
+    const SIDEBAR_MIN_WIDTH = 320;
+    const CANVAS_MIN_WIDTH = 320;
 
     // ========== 工具函数（使用 Utils 模块）==========
     const { distance, pointsEqual, clampInt, clampFloat, getPolygonCenter, deepClone } = Utils;
@@ -288,6 +298,82 @@
 
         sidebarTabPanels.forEach(panel => {
             panel.classList.toggle('active', panel.dataset.panel === tabName);
+        });
+    }
+
+    function getSidebarMaxWidth() {
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
+        return Math.max(SIDEBAR_MIN_WIDTH, viewportWidth - CANVAS_MIN_WIDTH);
+    }
+
+    function clampSidebarWidth(width) {
+        const nextWidth = Number(width);
+        if (!isFinite(nextWidth)) return SIDEBAR_MIN_WIDTH;
+        return Math.max(SIDEBAR_MIN_WIDTH, Math.min(nextWidth, getSidebarMaxWidth()));
+    }
+
+    function syncCanvasSizeForLayout() {
+        if (isImageLoaded) return;
+        canvas.width = Math.max(800, wrapper.clientWidth);
+        canvas.height = Math.max(600, wrapper.clientHeight);
+        resetView();
+        draw();
+    }
+
+    function setSidebarWidth(width) {
+        const nextWidth = clampSidebarWidth(width);
+        document.documentElement.style.setProperty('--sidebar-width', `${nextWidth}px`);
+        if (sidebarResizer) {
+            sidebarResizer.setAttribute('aria-valuenow', String(Math.round(nextWidth)));
+        }
+        syncCanvasSizeForLayout();
+    }
+
+    function stopSidebarResize() {
+        if (!sidebarResizeState.active) return;
+        sidebarResizeState.active = false;
+        sidebarResizeState.pointerId = null;
+        document.body.classList.remove('sidebar-resizing');
+    }
+
+    function initSidebarResize() {
+        if (!sidebar || !sidebarResizer) return;
+
+        const initialWidth = clampSidebarWidth(sidebar.getBoundingClientRect().width || SIDEBAR_MIN_WIDTH);
+        setSidebarWidth(initialWidth);
+        sidebarResizer.setAttribute('aria-valuemin', String(SIDEBAR_MIN_WIDTH));
+        sidebarResizer.setAttribute('aria-valuemax', String(getSidebarMaxWidth()));
+        sidebarResizer.setAttribute('aria-valuenow', String(Math.round(initialWidth)));
+
+        sidebarResizer.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            sidebarResizeState.active = true;
+            sidebarResizeState.startX = e.clientX;
+            sidebarResizeState.startWidth = sidebar.getBoundingClientRect().width;
+            sidebarResizeState.pointerId = e.pointerId;
+            sidebarResizer.setPointerCapture(e.pointerId);
+            document.body.classList.add('sidebar-resizing');
+        });
+
+        sidebarResizer.addEventListener('pointermove', (e) => {
+            if (!sidebarResizeState.active || sidebarResizeState.pointerId !== e.pointerId) return;
+            const delta = sidebarResizeState.startX - e.clientX;
+            setSidebarWidth(sidebarResizeState.startWidth + delta);
+            sidebarResizer.setAttribute('aria-valuemax', String(getSidebarMaxWidth()));
+        });
+
+        const releaseResize = (e) => {
+            if (!sidebarResizeState.active || sidebarResizeState.pointerId !== e.pointerId) return;
+            stopSidebarResize();
+        };
+
+        sidebarResizer.addEventListener('pointerup', releaseResize);
+        sidebarResizer.addEventListener('pointercancel', releaseResize);
+
+        window.addEventListener('resize', () => {
+            setSidebarWidth(sidebar.getBoundingClientRect().width || SIDEBAR_MIN_WIDTH);
+            sidebarResizer.setAttribute('aria-valuemax', String(getSidebarMaxWidth()));
         });
     }
 
@@ -2448,6 +2534,7 @@
 
     // ========== 初始化 ==========
     window.addEventListener('load', () => {
+        initSidebarResize();
         initSidebarTabs();
         initCitySelector();
         initLanguageSwitcher();

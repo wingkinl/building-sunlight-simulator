@@ -8,6 +8,7 @@
     --border-color: #ccc;
     --bg-light: #f8f9fa;
     --bg-white: #ffffff;
+    --sidebar-width: 460px;
 }
 
 * {
@@ -20,6 +21,15 @@ body {
     height: 100vh;
     font-family: 'Microsoft YaHei', sans-serif;
     overflow: hidden;
+}
+
+body.sidebar-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+body.sidebar-resizing * {
+    cursor: col-resize !important;
 }
 
 /* GitHub 图标链接 */
@@ -58,7 +68,7 @@ body {
     top: 16px;
     left: 76px;
     right: auto;
-    max-width: calc(100vw - 560px);
+    max-width: calc(100vw - var(--sidebar-width) - 100px);
     padding: 0;
     border: none;
     background: transparent;
@@ -184,7 +194,10 @@ canvas {
 
 /* 右侧边栏 */
 #sidebar {
-    width: 460px;
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    max-width: var(--sidebar-width);
+    flex: 0 0 var(--sidebar-width);
     background: var(--bg-light);
     border-left: 1px solid var(--border-color);
     padding: 16px;
@@ -194,6 +207,40 @@ canvas {
     box-shadow: -2px 0 5px rgba(0, 0, 0, 0.05);
     overflow: hidden;
     gap: 8px;
+}
+
+#sidebarResizer {
+    width: 12px;
+    flex: 0 0 12px;
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+    background: linear-gradient(180deg, rgba(221, 227, 232, 0.55), rgba(248, 249, 250, 0.8));
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
+    border-right: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+#sidebarResizer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 56px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(100, 116, 139, 0.24), rgba(100, 116, 139, 0.58));
+    box-shadow: -3px 0 0 rgba(255, 255, 255, 0.72), 3px 0 0 rgba(255, 255, 255, 0.72);
+}
+
+#sidebarResizer:hover,
+body.sidebar-resizing #sidebarResizer {
+    background: linear-gradient(180deg, rgba(203, 213, 225, 0.78), rgba(241, 245, 249, 0.95));
+}
+
+body.sidebar-resizing #sidebarResizer::before,
+#sidebarResizer:hover::before {
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.42), rgba(37, 99, 235, 0.82));
 }
 
 .sidebar-header {

@@ -545,6 +545,16 @@
         zoomInfo.innerText = `${i18n.t('editor.zoomInfo')}: ${Math.round(viewScale * 100)}%`;
     }
 
+    function getPolygonCloseEps() {
+        return CLOSE_EPS_BASE / viewScale;
+    }
+
+    function isNearCurrentPolygonStart(point) {
+        return !!point
+            && currentPoly.length >= CONFIG.EDITOR.MIN_POLYGON_POINTS
+            && distance(point, currentPoly[0]) <= getPolygonCloseEps();
+    }
+
     function getCanvasCoordinates(e) {
         const rect = wrapper.getBoundingClientRect();
         const mouseXInWrapper = e.clientX - rect.left;
@@ -609,6 +619,7 @@
                 }
                 draw();
             } else if (mode === 'drawing') {
+                if (e.detail > 1) return;
                 currentPoly.push(p);
                 draw();
             }
@@ -626,7 +637,7 @@
     wrapper.addEventListener('dblclick', (e) => {
         if (mode === 'drawing' && e.button === 0) {
             if (currentPoly.length >= 3) {
-                finishPolygon();
+                finishPolygon({ closeAtStart: isNearCurrentPolygonStart(getCanvasCoordinates(e)) });
             }
         }
     });
@@ -788,8 +799,7 @@
         // 绘制当前多边形
         if (currentPoly.length > 0) {
             const first = currentPoly[0];
-            const eps = CLOSE_EPS_BASE / viewScale;
-            const nearStart = distance(mousePos, first) <= eps && currentPoly.length > 2;
+            const nearStart = isNearCurrentPolygonStart(mousePos);
 
             ctx.beginPath();
             ctx.moveTo(currentPoly[0].x, currentPoly[0].y);
@@ -836,14 +846,17 @@
     }
 
     // ========== 多边形完成 ==========
-    function finishPolygon() {
+    function finishPolygon(options = {}) {
+        const rawPoints = options.closeAtStart && currentPoly.length > CONFIG.EDITOR.MIN_POLYGON_POINTS
+            ? currentPoly.slice(0, -1)
+            : currentPoly.slice();
         if (scaleRatio === 0) {
             alert(i18n.t('editor.alertNoScale'));
             currentPoly = [];
             draw();
             return;
         }
-        if (currentPoly.length < 3) {
+        if (rawPoints.length < 3) {
             alert(i18n.t('editor.alertMinPoints'));
             currentPoly = [];
             draw();
@@ -851,7 +864,7 @@
         }
 
         const eps = 0.75;
-        const cleaned = sanitizePolygon(currentPoly, eps);
+        const cleaned = sanitizePolygon(rawPoints, eps);
         if (cleaned.length < 3) {
             alert(i18n.t('editor.alertInvalidPoly'));
             currentPoly = [];

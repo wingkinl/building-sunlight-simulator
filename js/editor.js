@@ -299,6 +299,10 @@
         sidebarTabPanels.forEach(panel => {
             panel.classList.toggle('active', panel.dataset.panel === tabName);
         });
+
+        if (tabName === 'buildings') {
+            scheduleBuildingTableAutosize();
+        }
     }
 
     function getSidebarMaxWidth() {
@@ -327,6 +331,7 @@
             sidebarResizer.setAttribute('aria-valuenow', String(Math.round(nextWidth)));
         }
         syncCanvasSizeForLayout();
+        scheduleBuildingTableAutosize();
     }
 
     function stopSidebarResize() {
@@ -883,6 +888,136 @@
 
     // ========== 表格渲染 ==========
     const tableBody = document.getElementById('tableBody');
+    const tableWrapper = document.getElementById('table-wrapper');
+    const buildingsTable = document.getElementById('buildingsTable');
+    const buildingTableCols = buildingsTable ? Array.from(buildingsTable.querySelectorAll('colgroup col')) : [];
+    const buildingTableMeasureCanvas = document.createElement('canvas');
+    const buildingTableMeasureCtx = buildingTableMeasureCanvas.getContext('2d');
+    let buildingTableAutosizeQueued = false;
+
+    function getMeasureFont(el) {
+        const style = window.getComputedStyle(el);
+        return style.font || `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} / ${style.lineHeight} ${style.fontFamily}`;
+    }
+
+    function measureElementTextWidth(el, text) {
+        if (!buildingTableMeasureCtx || !el) return 0;
+        buildingTableMeasureCtx.font = getMeasureFont(el);
+        return Math.ceil(buildingTableMeasureCtx.measureText(String(text ?? '') || ' ').width);
+    }
+
+    function getHorizontalChromeWidth(el) {
+        if (!el) return 0;
+        const style = window.getComputedStyle(el);
+        return Math.ceil(
+            (parseFloat(style.paddingLeft) || 0) +
+            (parseFloat(style.paddingRight) || 0) +
+            (parseFloat(style.borderLeftWidth) || 0) +
+            (parseFloat(style.borderRightWidth) || 0)
+        );
+    }
+
+    function measureInputWidth(inputEl, fallbackText, options = {}) {
+        if (!inputEl) return 0;
+        const includePlaceholder = options.includePlaceholder !== false;
+        const text = String(inputEl.value || fallbackText || '').trim()
+            || (includePlaceholder ? String(inputEl.placeholder || '').trim() : '')
+            || '0';
+        const extra = getHorizontalChromeWidth(inputEl) + (inputEl.type === 'number' ? 34 : 18);
+        return measureElementTextWidth(inputEl, text) + extra;
+    }
+
+    function measureButtonWidth(buttonEl) {
+        if (!buttonEl) return 0;
+        return measureElementTextWidth(buttonEl, buttonEl.textContent) + getHorizontalChromeWidth(buttonEl) + 18;
+    }
+
+    function setBuildingTableColumnWidth(columnName, widthPx) {
+        const col = buildingTableCols.find(item => item.dataset.column === columnName);
+        if (!col) return;
+        const width = Math.max(0, Math.round(widthPx));
+        col.style.width = `${width}px`;
+        col.style.minWidth = `${width}px`;
+    }
+
+    function autoSizeBuildingTableColumns() {
+        if (!buildingsTable) return;
+
+        const headerWidths = {};
+        buildingsTable.querySelectorAll('thead th[data-column]').forEach(th => {
+            headerWidths[th.dataset.column] = measureElementTextWidth(th, th.textContent) + 24;
+        });
+
+        let nameMinWidth = Math.max(120, headerWidths.name || 0);
+
+        const fixedWidths = {
+            floors: Math.max(68, headerWidths.floors || 0),
+            floorHeight: Math.max(92, headerWidths.floorHeight || 0),
+            units: Math.max(72, headerWidths.units || 0),
+            isOwn: Math.max(58, headerWidths.isOwn || 0),
+            actions: Math.max(72, headerWidths.actions || 0)
+        };
+
+        buildingsTable.querySelectorAll('td[data-column="name"] input').forEach(input => {
+            nameMinWidth = Math.max(
+                nameMinWidth,
+                Math.min(420, measureInputWidth(input, '', { includePlaceholder: false }))
+            );
+        });
+
+        buildingsTable.querySelectorAll('td[data-column="floors"] input').forEach(input => {
+            fixedWidths.floors = Math.max(fixedWidths.floors, Math.min(120, measureInputWidth(input, '300')));
+        });
+
+        buildingsTable.querySelectorAll('td[data-column="floorHeight"] input').forEach(input => {
+            fixedWidths.floorHeight = Math.max(fixedWidths.floorHeight, Math.min(140, measureInputWidth(input, '20.00')));
+        });
+
+        buildingsTable.querySelectorAll('td[data-column="units"] input').forEach(input => {
+            fixedWidths.units = Math.max(fixedWidths.units, Math.min(120, measureInputWidth(input, '50')));
+        });
+
+        const ownCheckbox = buildingsTable.querySelector('td[data-column="isOwn"] input[type="checkbox"]');
+        if (ownCheckbox) {
+            fixedWidths.isOwn = Math.max(
+                fixedWidths.isOwn,
+                Math.ceil(parseFloat(window.getComputedStyle(ownCheckbox).width) || ownCheckbox.offsetWidth || 16) + 28
+            );
+        }
+
+        buildingsTable.querySelectorAll('td[data-column="actions"]').forEach(cell => {
+            const buttons = Array.from(cell.querySelectorAll('button'));
+            if (buttons.length === 0) return;
+            const gap = Math.max(0, buttons.length - 1) * 6;
+            const total = buttons.reduce((sum, btn) => sum + measureButtonWidth(btn), 0) + gap + 12;
+            fixedWidths.actions = Math.max(fixedWidths.actions, total);
+        });
+
+        const fixedWidthTotal = Object.values(fixedWidths).reduce((sum, width) => sum + width, 0);
+        const wrapperWidth = tableWrapper ? tableWrapper.clientWidth : 0;
+        const nameWidth = Math.max(nameMinWidth, wrapperWidth - fixedWidthTotal);
+        const widths = {
+            name: nameWidth,
+            ...fixedWidths
+        };
+
+        Object.entries(widths).forEach(([columnName, width]) => {
+            setBuildingTableColumnWidth(columnName, width);
+        });
+
+        const totalWidth = fixedWidthTotal + nameWidth;
+        buildingsTable.style.width = `${totalWidth}px`;
+        buildingsTable.style.minWidth = `${totalWidth}px`;
+    }
+
+    function scheduleBuildingTableAutosize() {
+        if (!buildingsTable || buildingTableAutosizeQueued) return;
+        buildingTableAutosizeQueued = true;
+        requestAnimationFrame(() => {
+            buildingTableAutosizeQueued = false;
+            autoSizeBuildingTableColumns();
+        });
+    }
 
     function renderTable() {
         tableBody.innerHTML = '';
@@ -891,6 +1026,7 @@
 
             // 名称
             const tdName = document.createElement('td');
+            tdName.dataset.column = 'name';
             const inpName = document.createElement('input');
             inpName.type = 'text';
             inpName.value = b.name;
@@ -898,50 +1034,61 @@
             inpName.addEventListener('input', () => {
                 b.name = inpName.value || i18n.t('viewer.defaultBuildingName').replace('{0}', i + 1);
                 draw();
+                scheduleBuildingTableAutosize();
             });
             tdName.appendChild(inpName);
 
             // 层数
             const tdFloors = document.createElement('td');
+            tdFloors.dataset.column = 'floors';
             const inpFloors = document.createElement('input');
             inpFloors.type = 'number';
             inpFloors.min = 1;
             inpFloors.step = 1;
             inpFloors.value = b.floors;
+            inpFloors.addEventListener('input', scheduleBuildingTableAutosize);
             inpFloors.addEventListener('change', () => {
                 b.floors = clampInt(parseInt(inpFloors.value), 1, 300, b.floors);
                 inpFloors.value = b.floors;
+                scheduleBuildingTableAutosize();
             });
             tdFloors.appendChild(inpFloors);
 
             // 层高
             const tdFloorH = document.createElement('td');
+            tdFloorH.dataset.column = 'floorHeight';
             const inpFloorH = document.createElement('input');
             inpFloorH.type = 'number';
             inpFloorH.min = 1;
             inpFloorH.step = 0.01;
             inpFloorH.value = b.floorHeight;
+            inpFloorH.addEventListener('input', scheduleBuildingTableAutosize);
             inpFloorH.addEventListener('change', () => {
                 b.floorHeight = clampFloat(parseFloat(inpFloorH.value), 1, 20, b.floorHeight);
                 inpFloorH.value = b.floorHeight;
+                scheduleBuildingTableAutosize();
             });
             tdFloorH.appendChild(inpFloorH);
 
             // 户数
             const tdUnits = document.createElement('td');
+            tdUnits.dataset.column = 'units';
             const inpUnits = document.createElement('input');
             inpUnits.type = 'number';
             inpUnits.min = 1;
             inpUnits.step = 1;
             inpUnits.value = b.units;
+            inpUnits.addEventListener('input', scheduleBuildingTableAutosize);
             inpUnits.addEventListener('change', () => {
                 b.units = clampInt(parseInt(inpUnits.value), 1, 50, b.units);
                 inpUnits.value = b.units;
+                scheduleBuildingTableAutosize();
             });
             tdUnits.appendChild(inpUnits);
 
             // 本小区
             const tdOwn = document.createElement('td');
+            tdOwn.dataset.column = 'isOwn';
             const chkOwn = document.createElement('input');
             chkOwn.type = 'checkbox';
             chkOwn.checked = b.isThisCommunity !== false;
@@ -953,15 +1100,18 @@
 
             // 删除
             const tdOps = document.createElement('td');
+            tdOps.dataset.column = 'actions';
             tdOps.style.whiteSpace = 'nowrap';
             const btnSplit = document.createElement('button');
             btnSplit.className = 'btn-mini btn-outline';
+            btnSplit.type = 'button';
             btnSplit.textContent = i18n.t('editor.tableSplit');
             btnSplit.addEventListener('click', () => {
                 openSplitModal(i);
             });
             const btnDel = document.createElement('button');
             btnDel.className = 'btn-mini btn-danger';
+            btnDel.type = 'button';
             btnDel.textContent = i18n.t('editor.tableDelete');
             btnDel.addEventListener('click', () => {
                 if (confirm(i18n.t('editor.alertConfirmDelete'))) {
@@ -982,6 +1132,8 @@
 
             tableBody.appendChild(tr);
         });
+
+        scheduleBuildingTableAutosize();
     }
 
     // ========== 应用默认值到所有楼栋 ==========

@@ -145,15 +145,23 @@
                     </div>
 
                     <div id="table-wrapper">
-                        <table>
+                        <table id="buildingsTable">
+                            <colgroup>
+                                <col data-column="name">
+                                <col data-column="floors">
+                                <col data-column="floorHeight">
+                                <col data-column="units">
+                                <col data-column="isOwn">
+                                <col data-column="actions">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th style="width:200px;" data-i18n="editor.tableName">名称（可编辑）</th>
-                                    <th style="width:90px;" data-i18n="editor.tableFloors">层数</th>
-                                    <th style="width:110px;" data-i18n="editor.tableFloorHeight">层高(米)</th>
-                                    <th style="width:90px;" data-i18n="editor.tableUnits">户/层</th>
-                                    <th style="width:84px;" data-i18n="editor.tableIsOwn">本小区</th>
-                                    <th style="width:80px;" data-i18n="editor.tableActions">操作</th>
+                                    <th data-column="name" data-i18n="editor.tableName">名称（可编辑）</th>
+                                    <th data-column="floors" data-i18n="editor.tableFloors">层数</th>
+                                    <th data-column="floorHeight" data-i18n="editor.tableFloorHeight">层高(米)</th>
+                                    <th data-column="units" data-i18n="editor.tableUnits">户/层</th>
+                                    <th data-column="isOwn" data-i18n="editor.tableIsOwn">本小区</th>
+                                    <th data-column="actions" data-i18n="editor.tableActions">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="tableBody"></tbody>

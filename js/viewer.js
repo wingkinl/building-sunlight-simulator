@@ -1194,6 +1194,50 @@
         updateLatDisplay();
     }
 
+    function applyLocationFromData(data) {
+        const citySelect = document.getElementById('citySelect');
+        const latInput = document.getElementById('latitudeInput');
+        const latFromData = Number(data?.latitude);
+        const hasLat = isFinite(latFromData);
+        const cityFromData = typeof data?.city === 'string' ? data.city.trim() : '';
+
+        let matchedCity = false;
+        if (cityFromData) {
+            for (const option of citySelect.options) {
+                if (option.value === cityFromData) {
+                    citySelect.value = option.value;
+                    matchedCity = true;
+                    break;
+                }
+            }
+        }
+
+        if (!matchedCity && hasLat) {
+            for (const option of citySelect.options) {
+                if (option.dataset.lat && Math.abs(parseFloat(option.dataset.lat) - latFromData) < 0.01) {
+                    citySelect.value = option.value;
+                    matchedCity = true;
+                    break;
+                }
+            }
+        }
+
+        if (!matchedCity) {
+            citySelect.value = '';
+        }
+
+        if (hasLat) {
+            LATITUDE = latFromData;
+        } else if (matchedCity) {
+            const selectedOption = citySelect.options[citySelect.selectedIndex];
+            const lat = Number(selectedOption?.dataset?.lat);
+            if (isFinite(lat)) LATITUDE = lat;
+        }
+
+        latInput.value = LATITUDE;
+        updateLatDisplay();
+    }
+
     function clearSunlightResults() {
         sunlightResults = null;
         clearGroup(heatmapGroup);
@@ -1213,24 +1257,7 @@
         reader.onload = (ev) => {
             try {
                 const data = JSON.parse(ev.target.result);
-                if (typeof data.latitude === 'number' && isFinite(data.latitude)) {
-                    LATITUDE = data.latitude;
-                    document.getElementById('latitudeInput').value = LATITUDE;
-                    updateLatDisplay();
-
-                    const citySelect = document.getElementById('citySelect');
-                    let matched = false;
-                    for (const option of citySelect.options) {
-                        if (option.dataset.lat && Math.abs(parseFloat(option.dataset.lat) - LATITUDE) < 0.01) {
-                            citySelect.value = option.value;
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if (!matched) {
-                        citySelect.value = '';
-                    }
-                }
+                applyLocationFromData(data);
                 currentData = data;
                 loadBuildings(data);
                 clearSunlightResults();
@@ -1885,6 +1912,7 @@
     if (typeof DEFAULT_DATA !== 'undefined') {
         console.log('检测到默认数据，正在加载...');
         currentData = DEFAULT_DATA;
+        applyLocationFromData(DEFAULT_DATA);
         loadBuildings(DEFAULT_DATA);
         document.getElementById('empty-state').style.display = 'none';
     } else {

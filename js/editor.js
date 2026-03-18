@@ -251,21 +251,50 @@
         });
     }
 
+    function syncCitySelection(cityName, latitude) {
+        const targetCity = typeof cityName === 'string' ? cityName.trim() : '';
+        const lat = Number(latitude);
+
+        if (targetCity) {
+            for (const option of citySelectEl.options) {
+                if (option.value === targetCity) {
+                    citySelectEl.value = option.value;
+                    return;
+                }
+            }
+        }
+
+        if (isFinite(lat)) {
+            for (const option of citySelectEl.options) {
+                if (option.dataset.lat && Math.abs(parseFloat(option.dataset.lat) - lat) < 0.01) {
+                    citySelectEl.value = option.value;
+                    return;
+                }
+            }
+        }
+
+        citySelectEl.value = '';
+    }
+
     // ========== 图片加载 ==========
+    function applyLoadedPlanImage() {
+        canvas.style.display = 'block';
+        emptyTip.style.display = 'none';
+        canvas.width = image.width;
+        canvas.height = image.height;
+        isImageLoaded = true;
+        document.getElementById('btnStartScale').disabled = false;
+        resetView();
+        draw();
+    }
+
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (event) => {
             image.onload = () => {
-                canvas.style.display = 'block';
-                emptyTip.style.display = 'none';
-                canvas.width = image.width;
-                canvas.height = image.height;
-                isImageLoaded = true;
-                document.getElementById('btnStartScale').disabled = false;
-                resetView();
-                draw();
+                applyLoadedPlanImage();
             };
             image.src = event.target.result;
         };
@@ -827,10 +856,12 @@
 
         const round2 = n => Utils.roundTo(n, 2);
         const lat = parseFloat(projectLatEl.value) || CONFIG.DEFAULTS.LATITUDE;
+        const city = String(citySelectEl?.value || '').trim();
 
         const exportData = {
             version: CONFIG.APP.VERSION,
             latitude: lat,
+            city,
             scaleRatio: scaleRatio,
             origin: { x: centerX, y: centerY },
             buildings: buildings.map(b => {
@@ -964,9 +995,11 @@
         }
 
         scaleRatio = sr;
-        if (typeof data?.latitude === 'number' && isFinite(data.latitude)) {
-            projectLatEl.value = data.latitude;
+        const importedLat = Number(data?.latitude);
+        if (isFinite(importedLat)) {
+            projectLatEl.value = importedLat;
         }
+        syncCitySelection(data?.city, importedLat);
 
         buildings = imported;
         updateScaleStatus();

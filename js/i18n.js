@@ -37,12 +37,6 @@ const i18n = (function() {
                 emptyState: '请在右上角导入 JSON 配置文件',
                 pageTitle: '☀️ 楼盘采光模拟',
                 
-                // 状态块
-                statusLabel: '当前状态',
-                statusCoord: '坐标对齐规划图',
-                statusOrientation: '方位：',
-                statusNorth: '↑ 上北下南',
-                
                 // 控制面板
                 step1: '1. 导入数据',
                 selectJson: '📂 选择 JSON 文件',
@@ -240,12 +234,6 @@ const i18n = (function() {
                 title: 'Building Sunlight Visualization - Sunlight Simulation System',
                 emptyState: 'Please import JSON configuration file in the top right corner',
                 pageTitle: '☀️ Building Sunlight Simulation',
-                
-                // Status block
-                statusLabel: 'Current Status',
-                statusCoord: 'Coordinates aligned with plan',
-                statusOrientation: 'Orientation:',
-                statusNorth: '↑ North Up',
                 
                 // Control panel
                 step1: '1. Import Data',

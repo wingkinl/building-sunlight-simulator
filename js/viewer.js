@@ -1759,7 +1759,7 @@
 
         document.getElementById('toggleOwnOnly').addEventListener('change', (e) => {
             showOwnOnly = !!e.target.checked;
-            applyVisibilityFilter(true);
+            applyVisibilityFilter(false);
         });
 
         // 日照分析按钮

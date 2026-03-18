@@ -74,6 +74,15 @@ body {
 .panel-content {
     max-height: calc(90vh - 80px);
     overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#controls select,
+#controls input,
+#controls button,
+#controls .file-upload-btn {
+    box-sizing: border-box;
+    max-width: 100%;
 }
 
 .control-group {

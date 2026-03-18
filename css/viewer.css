@@ -32,7 +32,7 @@ body {
     max-width: calc(100vw - 32px);
     background: linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(241, 248, 255, 0.24));
     padding: 16px;
-    padding-top: 52px;
+    padding-top: 16px;
     border-radius: var(--radius);
     border: 1px solid rgba(255, 255, 255, 0.45);
     box-shadow: 0 24px 50px rgba(31, 64, 104, 0.2), 0 10px 24px rgba(15, 30, 58, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.65);
@@ -126,13 +126,26 @@ input[type="range"] {
     letter-spacing: 0.5px;
 }
 
-h2 {
-    margin: 0 0 12px;
-    font-size: 16px;
-    text-align: center;
-    color: #111;
-    border-bottom: 1px solid #e9eef5;
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 36px;
+    padding-left: 44px;
+    margin-bottom: 12px;
     padding-bottom: 10px;
+    border-bottom: 1px solid #e9eef5;
+}
+
+.sidebar-title {
+    margin: 0;
+    font-size: 16px;
+    color: #111;
+    line-height: 1.2;
+    flex: 1;
+    text-align: left;
+    min-width: 0;
 }
 
 /* 文件上传按钮 */
@@ -724,7 +737,7 @@ h2 {
         right: 8px;
         width: 280px;
         padding: 12px;
-        padding-top: 48px;
+        padding-top: 12px;
     }
 
     #controls.collapsed {

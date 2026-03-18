@@ -137,6 +137,28 @@
         return normalizeRatios(ratios).slice(0, count);
     }
 
+    function formatDefaultBuildingName(index) {
+        const n = Math.max(1, parseInt(index || 1, 10));
+        const template = i18n.t('viewer.defaultBuildingName');
+        return template.includes('{0}') ? template.replace('{0}', n) : `${template} ${n}`;
+    }
+
+    function getNextAvailableDefaultBuildingName(startIndex = buildings.length + 1) {
+        const existingNames = new Set(
+            buildings
+                .map(b => (b?.name ?? '').toString().trim())
+                .filter(Boolean)
+        );
+
+        let index = Math.max(1, parseInt(startIndex || 1, 10));
+        let nextName = formatDefaultBuildingName(index);
+        while (existingNames.has(nextName)) {
+            index += 1;
+            nextName = formatDefaultBuildingName(index);
+        }
+        return nextName;
+    }
+
     function ratiosMatch(a, b, eps = 1e-6) {
         if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
         for (let i = 0; i < a.length; i++) {
@@ -1107,13 +1129,12 @@
             return;
         }
 
-        const idx = buildings.length + 1;
         const useDefaults = chkUseDefaults.checked;
         const validation = CONFIG.VALIDATION;
         
         const b = {
             id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-            name: i18n.t('viewer.defaultBuildingName').replace('{0}', idx),
+            name: getNextAvailableDefaultBuildingName(buildings.length + 1),
             floors: useDefaults ? clampInt(parseInt(defFloorsEl.value), validation.FLOORS.MIN, validation.FLOORS.MAX, CONFIG.DEFAULTS.FLOORS) : CONFIG.DEFAULTS.FLOORS,
             floorHeight: useDefaults ? clampFloat(parseFloat(defFloorHeightEl.value), validation.FLOOR_HEIGHT.MIN, validation.FLOOR_HEIGHT.MAX, CONFIG.DEFAULTS.FLOOR_HEIGHT) : CONFIG.DEFAULTS.FLOOR_HEIGHT,
             units: useDefaults ? clampInt(parseInt(defUnitsEl.value), validation.UNITS.MIN, validation.UNITS.MAX, CONFIG.DEFAULTS.UNITS_PER_FLOOR) : CONFIG.DEFAULTS.UNITS_PER_FLOOR,

@@ -1118,7 +1118,6 @@
                 LATITUDE = parseFloat(lat);
                 latInput.value = LATITUDE;
                 updateSun();
-                updateLatDisplay();
                 // 清除之前的计算结果
                 clearSunlightResults();
             }
@@ -1129,7 +1128,6 @@
             if (!isNaN(inputLat) && inputLat >= -90 && inputLat <= 90) {
                 LATITUDE = inputLat;
                 updateSun();
-                updateLatDisplay();
                 clearSunlightResults();
 
                 let matched = false;
@@ -1145,8 +1143,6 @@
                 }
             }
         });
-
-        updateLatDisplay();
     }
 
     function applyLocationFromData(data) {
@@ -1190,7 +1186,6 @@
         }
 
         latInput.value = LATITUDE;
-        updateLatDisplay();
     }
 
     function clearSunlightResults() {
@@ -1943,9 +1938,6 @@
     }
 
     function updateDynamicContent() {
-        // 更新纬度显示
-        updateLatDisplay();
-
         // 更新时间显示
         const hour = getCurrentHour();
         setTimeText(hour);
@@ -1953,14 +1945,6 @@
         // 如果有日照统计结果，更新显示
         if (sunlightResults) {
             showSunlightStats(sunlightResults);
-        }
-    }
-
-    function updateLatDisplay() {
-        const latDisplay = document.getElementById('latDisplay');
-        if (latDisplay) {
-            const hemisphere = LATITUDE >= 0 ? i18n.t('viewer.northLat') : i18n.t('viewer.southLat');
-            latDisplay.textContent = `${i18n.t('viewer.currentLat')}: ${hemisphere} ${Math.abs(LATITUDE).toFixed(2)}°`;
         }
     }
 

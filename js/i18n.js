@@ -139,7 +139,7 @@ const i18n = (function() {
                 
                 // 步骤3
                 step3Title: '3. 绘制楼栋',
-                step3Hint: '🖱️ 滚轮缩放，按住中键或空格拖拽视图',
+                step3Hint: '🖱️ 滚轮缩放；浏览模式空白处左键拖拽（或中键/空格）移动视图',
                 step3Operation: '操作: 左键加点，左键双击结束；右键撤销上个点。',
                 modeIdle: '浏览模式',
                 modeDrawing: '绘制模式',
@@ -343,7 +343,7 @@ const i18n = (function() {
                 
                 // Step 3
                 step3Title: '3. Draw Buildings',
-                step3Hint: '🖱️ Scroll to zoom, hold middle button or space to drag view',
+                step3Hint: '🖱️ Scroll to zoom; in Browse Mode drag on empty area with left button (or use middle button / Space) to pan',
                 step3Operation: 'Operation: Left click to add point, double-click to finish; right click to undo last point.',
                 modeIdle: 'Browse Mode',
                 modeDrawing: 'Draw Mode',

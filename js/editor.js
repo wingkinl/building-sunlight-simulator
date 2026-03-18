@@ -77,6 +77,7 @@
     let isDragging = false;
     let lastMouseX = 0;
     let lastMouseY = 0;
+    let isSpacePanKeyDown = false;
     let sidebarResizeState = {
         active: false,
         startX: 0,
@@ -727,7 +728,8 @@
     }, { passive: false });
 
     wrapper.addEventListener('mousedown', (e) => {
-        const isSpacePressed = e.getModifierState && e.getModifierState(" ");
+        const isSpacePressed = isSpacePanKeyDown
+            || (e.getModifierState && e.getModifierState('Space'));
 
         if (splitState.open) return;
 
@@ -764,6 +766,13 @@
                         lastPoint: p,
                         moved: false
                     };
+                    e.preventDefault();
+                } else {
+                    // In browse mode, allow plain left-drag panning on empty canvas area.
+                    isDragging = true;
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                    wrapper.classList.add('grabbing');
                     e.preventDefault();
                 }
             } else if (mode === 'drawing') {
@@ -858,6 +867,16 @@
         dragBuildingState = null;
         wrapper.classList.remove('grabbing');
         updateCursor();
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' || e.key === ' ') {
+            isSpacePanKeyDown = false;
+        }
+    });
+
+    window.addEventListener('blur', () => {
+        isSpacePanKeyDown = false;
     });
 
     wrapper.addEventListener('mouseleave', () => {
@@ -2626,6 +2645,12 @@
         if (e.target === splitModalOverlay) closeSplitModal();
     });
     window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' || e.key === ' ') {
+            if (!isEditableElement(document.activeElement)) {
+                isSpacePanKeyDown = true;
+                if (!splitState.open) e.preventDefault();
+            }
+        }
         if (e.key === 'Escape' && splitState.open) closeSplitModal();
         const isDeleteKey = e.key === 'Delete' || e.key === 'Del' || e.code === 'Delete';
         const canDeleteSelectedBuilding = mode === 'idle' || (mode === 'drawing' && currentPoly.length === 0);

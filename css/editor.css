@@ -885,6 +885,23 @@ button:disabled {
     vertical-align: middle;
 }
 
+#buildingsTable tbody tr {
+    transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+#buildingsTable tbody tr.is-hovered {
+    background: rgba(245, 158, 11, 0.12);
+}
+
+#buildingsTable tbody tr.is-selected {
+    background: rgba(21, 128, 61, 0.12);
+    box-shadow: inset 3px 0 0 #15803d;
+}
+
+#buildingsTable tbody tr.is-selected.is-hovered {
+    background: rgba(21, 128, 61, 0.18);
+}
+
 #buildingsTable td input[type="text"],
 #buildingsTable td input[type="number"] {
     width: 100%;

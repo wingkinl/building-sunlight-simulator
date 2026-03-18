@@ -205,6 +205,136 @@
         return { x: Math.cos(rad), y: Math.sin(rad) };
     }
 
+    function pointInPolygon(point, polygon) {
+        if (!point || !Array.isArray(polygon) || polygon.length < 3) return false;
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const pi = polygon[i];
+            const pj = polygon[j];
+            const intersects = ((pi.y > point.y) !== (pj.y > point.y))
+                && (point.x < ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || Number.EPSILON) + pi.x);
+            if (intersects) inside = !inside;
+        }
+        return inside;
+    }
+
+    function findBuildingIndexAtPoint(point) {
+        if (!point) return -1;
+        for (let i = buildings.length - 1; i >= 0; i--) {
+            if (pointInPolygon(point, buildings[i]?.points)) return i;
+        }
+        return -1;
+    }
+
+    let hoveredBuildingIndex = -1;
+    let selectedBuildingIndex = -1;
+    let dragBuildingState = null;
+
+    function getBuildingRow(index) {
+        return tableBody?.querySelector(`tr[data-building-index="${index}"]`) || null;
+    }
+
+    function scrollBuildingRowIntoView(index) {
+        const row = getBuildingRow(index);
+        if (!row || !tableWrapper) return;
+        const rowTop = row.offsetTop;
+        const rowBottom = rowTop + row.offsetHeight;
+        const visibleTop = tableWrapper.scrollTop;
+        const visibleBottom = visibleTop + tableWrapper.clientHeight;
+        if (rowTop < visibleTop) {
+            tableWrapper.scrollTop = rowTop;
+        } else if (rowBottom > visibleBottom) {
+            tableWrapper.scrollTop = rowBottom - tableWrapper.clientHeight;
+        }
+    }
+
+    function syncBuildingRowState() {
+        if (!tableBody) return;
+        tableBody.querySelectorAll('tr[data-building-index]').forEach(row => {
+            const index = Number(row.dataset.buildingIndex);
+            row.classList.toggle('is-hovered', index === hoveredBuildingIndex);
+            row.classList.toggle('is-selected', index === selectedBuildingIndex);
+        });
+    }
+
+    function setHoveredBuildingIndex(index) {
+        const nextIndex = (typeof index === 'number' && index >= 0 && index < buildings.length) ? index : -1;
+        if (hoveredBuildingIndex === nextIndex) return;
+        hoveredBuildingIndex = nextIndex;
+        syncBuildingRowState();
+        draw();
+        updateCursor();
+    }
+
+    function setSelectedBuildingIndex(index, options = {}) {
+        const nextIndex = (typeof index === 'number' && index >= 0 && index < buildings.length) ? index : -1;
+        selectedBuildingIndex = nextIndex;
+        syncBuildingRowState();
+        if (options.scrollIntoView && nextIndex !== -1) scrollBuildingRowIntoView(nextIndex);
+        draw();
+        updateCursor();
+    }
+
+    function deleteBuildingAtIndex(index, options = {}) {
+        if (!(index >= 0 && index < buildings.length)) return false;
+        if (options.confirm && !window.confirm(i18n.t('editor.alertConfirmDelete'))) return false;
+        buildings.splice(index, 1);
+        hoveredBuildingIndex = -1;
+        selectedBuildingIndex = -1;
+        dragBuildingState = null;
+        renderTable();
+        draw();
+        updateCursor();
+        return true;
+    }
+
+    function promptRenameBuilding(index) {
+        const building = buildings[index];
+        if (!building) return;
+        const nextName = window.prompt(
+            i18n.t('editor.renamePrompt'),
+            building.name || i18n.t('viewer.defaultBuildingName').replace('{0}', index + 1)
+        );
+        if (nextName == null) return;
+        const trimmed = nextName.trim();
+        building.name = trimmed || i18n.t('viewer.defaultBuildingName').replace('{0}', index + 1);
+        renderTable();
+        setSelectedBuildingIndex(index, { scrollIntoView: true });
+    }
+
+    function moveBuildingByDelta(index, dx, dy) {
+        if (!(index >= 0 && index < buildings.length)) return;
+        if (!isFinite(dx) || !isFinite(dy) || (!dx && !dy)) return;
+        const building = buildings[index];
+        building.points = building.points.map(point => ({
+            x: point.x + dx,
+            y: point.y + dy
+        }));
+        if (Array.isArray(building.cutLines) && building.cutLines.length > 0) {
+            building.cutLines = building.cutLines.map(line => Array.isArray(line)
+                ? line.map(point => ({ x: point.x + dx, y: point.y + dy }))
+                : line);
+        }
+        if (Array.isArray(building.unitCenters) && building.unitCenters.length > 0) {
+            building.unitCenters = building.unitCenters.map(center => ({
+                ...center,
+                x: center.x + dx,
+                y: center.y + dy
+            }));
+        }
+        draw();
+    }
+
+    function isEditableElement(el) {
+        if (!el || el === document.body) return false;
+        if (el.isContentEditable) return true;
+        const tagName = (el.tagName || '').toUpperCase();
+        if (tagName === 'TEXTAREA') return true;
+        if (tagName !== 'INPUT') return false;
+        const inputType = String(el.type || '').toLowerCase();
+        return !['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'].includes(inputType);
+    }
+
     /**
      * 多边形净化 - 移除重复点、过短边、共线点
      * @param {Array} rawPoints - 原始点数组
@@ -565,7 +695,12 @@
     }
 
     function updateCursor() {
-        if (mode === 'drawing' || mode === 'scaling') {
+        const canEditExistingBuilding = mode === 'idle' || (mode === 'drawing' && currentPoly.length === 0);
+        if (dragBuildingState) {
+            wrapper.style.cursor = 'grabbing';
+        } else if (hoveredBuildingIndex !== -1 && canEditExistingBuilding) {
+            wrapper.style.cursor = 'pointer';
+        } else if (mode === 'drawing' || mode === 'scaling') {
             wrapper.style.cursor = 'crosshair';
         } else {
             wrapper.style.cursor = 'grab';
@@ -594,8 +729,10 @@
     wrapper.addEventListener('mousedown', (e) => {
         const isSpacePressed = e.getModifierState && e.getModifierState(" ");
 
+        if (splitState.open) return;
+
         // 拖拽视图
-        if (e.button === 1 || (mode === 'idle' && e.button === 0) || (isSpacePressed && e.button === 0)) {
+        if (e.button === 1 || (isSpacePressed && e.button === 0)) {
             isDragging = true;
             lastMouseX = e.clientX;
             lastMouseY = e.clientY;
@@ -604,8 +741,8 @@
             return;
         }
 
-        // 无底图时，仍允许标定与绘制；其余模式不处理点击
-        if (!isImageLoaded && mode !== 'scaling' && mode !== 'drawing') return;
+        // 无底图时，仍允许标定、绘制，以及对现有楼栋进行选择/编辑
+        if (!isImageLoaded && mode !== 'scaling' && mode !== 'drawing' && buildings.length === 0) return;
 
         // 左键操作
         if (e.button === 0) {
@@ -618,7 +755,31 @@
                     document.getElementById('scaleInputArea').style.display = 'block';
                 }
                 draw();
+            } else if (mode === 'idle') {
+                const hitIndex = findBuildingIndexAtPoint(p);
+                setSelectedBuildingIndex(hitIndex, { scrollIntoView: hitIndex !== -1 });
+                if (hitIndex !== -1) {
+                    dragBuildingState = {
+                        index: hitIndex,
+                        lastPoint: p,
+                        moved: false
+                    };
+                    e.preventDefault();
+                }
             } else if (mode === 'drawing') {
+                if (currentPoly.length === 0) {
+                    const hitIndex = findBuildingIndexAtPoint(p);
+                    if (hitIndex !== -1) {
+                        setSelectedBuildingIndex(hitIndex, { scrollIntoView: true });
+                        dragBuildingState = {
+                            index: hitIndex,
+                            lastPoint: p,
+                            moved: false
+                        };
+                        e.preventDefault();
+                        return;
+                    }
+                }
                 if (e.detail > 1) return;
                 currentPoly.push(p);
                 draw();
@@ -636,13 +797,33 @@
 
     wrapper.addEventListener('dblclick', (e) => {
         if (mode === 'drawing' && e.button === 0) {
+            if (currentPoly.length === 0) {
+                const hitIndex = findBuildingIndexAtPoint(getCanvasCoordinates(e));
+                if (hitIndex !== -1) {
+                    setSelectedBuildingIndex(hitIndex, { scrollIntoView: true });
+                    promptRenameBuilding(hitIndex);
+                    e.preventDefault();
+                }
+                return;
+            }
             if (currentPoly.length >= 3) {
                 finishPolygon({ closeAtStart: isNearCurrentPolygonStart(getCanvasCoordinates(e)) });
+            }
+            return;
+        }
+
+        if (mode === 'idle' && e.button === 0) {
+            const hitIndex = findBuildingIndexAtPoint(getCanvasCoordinates(e));
+            if (hitIndex !== -1) {
+                setSelectedBuildingIndex(hitIndex, { scrollIntoView: true });
+                promptRenameBuilding(hitIndex);
+                e.preventDefault();
             }
         }
     });
 
     window.addEventListener('mousemove', (e) => {
+        if (splitState.open) return;
         if (isDragging) {
             const dx = e.clientX - lastMouseX;
             const dy = e.clientY - lastMouseY;
@@ -653,14 +834,36 @@
             updateTransform();
             return;
         }
-        if (!isImageLoaded && mode !== 'scaling' && mode !== 'drawing') return;
+        if (!isImageLoaded && mode !== 'scaling' && mode !== 'drawing' && buildings.length === 0) return;
         mousePos = getCanvasCoordinates(e);
+        if (dragBuildingState && (mode === 'idle' || mode === 'drawing')) {
+            const dx = mousePos.x - dragBuildingState.lastPoint.x;
+            const dy = mousePos.y - dragBuildingState.lastPoint.y;
+            if (dx || dy) {
+                dragBuildingState.moved = true;
+                dragBuildingState.lastPoint = mousePos;
+                moveBuildingByDelta(dragBuildingState.index, dx, dy);
+            }
+            return;
+        }
+        if (mode === 'idle' || (mode === 'drawing' && currentPoly.length === 0)) {
+            setHoveredBuildingIndex(findBuildingIndexAtPoint(mousePos));
+            if (mode === 'idle') return;
+        }
         if (mode === 'drawing' || mode === 'scaling') draw();
     });
 
     window.addEventListener('mouseup', () => {
         isDragging = false;
+        dragBuildingState = null;
         wrapper.classList.remove('grabbing');
+        updateCursor();
+    });
+
+    wrapper.addEventListener('mouseleave', () => {
+        if (mode === 'idle' && !dragBuildingState) {
+            setHoveredBuildingIndex(-1);
+        }
     });
 
     canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -773,11 +976,24 @@
         }
 
         // 绘制已完成的楼栋
-        buildings.forEach(b => {
-            drawPolygon(b.points, 'rgba(0, 123, 255, 0.28)', '#007bff');
+        buildings.forEach((b, index) => {
+            const isSelected = index === selectedBuildingIndex;
+            const isHovered = index === hoveredBuildingIndex;
+            const fillColor = isSelected
+                ? 'rgba(21, 128, 61, 0.28)'
+                : isHovered
+                    ? 'rgba(245, 158, 11, 0.24)'
+                    : 'rgba(0, 123, 255, 0.28)';
+            const strokeColor = isSelected
+                ? '#15803d'
+                : isHovered
+                    ? '#f59e0b'
+                    : '#007bff';
+            const strokeWidth = isSelected ? 3 : (isHovered ? 2.5 : 2);
+            drawPolygon(b.points, fillColor, strokeColor, strokeWidth);
             const center = getPolygonCenter(b.points);
             ctx.fillStyle = "white";
-            ctx.font = `bold 16px Arial`;
+            ctx.font = `bold ${isSelected ? 17 : 16}px Arial`;
             ctx.strokeStyle = 'black';
             ctx.lineWidth = 3;
             ctx.strokeText(b.name, center.x - 10, center.y);
@@ -830,7 +1046,7 @@
         ctx.fill();
     }
 
-    function drawPolygon(points, fillColor, strokeColor) {
+    function drawPolygon(points, fillColor, strokeColor, strokeWidth = 2) {
         if (points.length < 3) return;
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
@@ -841,7 +1057,7 @@
         ctx.fillStyle = fillColor;
         ctx.fill();
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 2 / viewScale;
+        ctx.lineWidth = strokeWidth / viewScale;
         ctx.stroke();
     }
 
@@ -888,6 +1104,7 @@
         buildings.push(b);
         currentPoly = [];
         renderTable();
+        setSelectedBuildingIndex(buildings.length - 1, { scrollIntoView: true });
         draw();
     }
 
@@ -1091,6 +1308,29 @@
         tableBody.innerHTML = '';
         buildings.forEach((b, i) => {
             const tr = document.createElement('tr');
+            tr.dataset.buildingIndex = String(i);
+            tr.addEventListener('mouseenter', () => {
+                if (mode !== 'idle') return;
+                setHoveredBuildingIndex(i);
+            });
+            tr.addEventListener('mouseleave', () => {
+                if (mode !== 'idle') return;
+                setHoveredBuildingIndex(-1);
+            });
+            tr.addEventListener('click', (e) => {
+                if (e.target.closest('.btn-mini')) return;
+                setSelectedBuildingIndex(i, { scrollIntoView: true });
+            });
+
+            const bindInputSelection = (el) => {
+                el.addEventListener('focus', () => {
+                    setSelectedBuildingIndex(i, { scrollIntoView: true });
+                });
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    setSelectedBuildingIndex(i, { scrollIntoView: true });
+                });
+            };
 
             // 名称
             const tdName = document.createElement('td');
@@ -1099,6 +1339,7 @@
             inpName.type = 'text';
             inpName.value = b.name;
             inpName.placeholder = i18n.t('editor.namePlaceholder');
+            bindInputSelection(inpName);
             inpName.addEventListener('input', () => {
                 b.name = inpName.value || i18n.t('viewer.defaultBuildingName').replace('{0}', i + 1);
                 draw();
@@ -1114,6 +1355,7 @@
             inpFloors.min = 1;
             inpFloors.step = 1;
             inpFloors.value = b.floors;
+            bindInputSelection(inpFloors);
             inpFloors.addEventListener('input', scheduleBuildingTableAutosize);
             inpFloors.addEventListener('change', () => {
                 b.floors = clampInt(parseInt(inpFloors.value), 1, 300, b.floors);
@@ -1130,6 +1372,7 @@
             inpFloorH.min = 1;
             inpFloorH.step = 0.01;
             inpFloorH.value = b.floorHeight;
+            bindInputSelection(inpFloorH);
             inpFloorH.addEventListener('input', scheduleBuildingTableAutosize);
             inpFloorH.addEventListener('change', () => {
                 b.floorHeight = clampFloat(parseFloat(inpFloorH.value), 1, 20, b.floorHeight);
@@ -1146,6 +1389,7 @@
             inpUnits.min = 1;
             inpUnits.step = 1;
             inpUnits.value = b.units;
+            bindInputSelection(inpUnits);
             inpUnits.addEventListener('input', scheduleBuildingTableAutosize);
             inpUnits.addEventListener('change', () => {
                 b.units = clampInt(parseInt(inpUnits.value), 1, 50, b.units);
@@ -1160,6 +1404,7 @@
             const chkOwn = document.createElement('input');
             chkOwn.type = 'checkbox';
             chkOwn.checked = b.isThisCommunity !== false;
+            bindInputSelection(chkOwn);
             chkOwn.addEventListener('change', () => {
                 b.isThisCommunity = !!chkOwn.checked;
             });
@@ -1175,6 +1420,7 @@
             btnSplit.type = 'button';
             btnSplit.textContent = i18n.t('editor.tableSplit');
             btnSplit.addEventListener('click', () => {
+                setSelectedBuildingIndex(i, { scrollIntoView: true });
                 openSplitModal(i);
             });
             const btnDel = document.createElement('button');
@@ -1182,11 +1428,7 @@
             btnDel.type = 'button';
             btnDel.textContent = i18n.t('editor.tableDelete');
             btnDel.addEventListener('click', () => {
-                if (confirm(i18n.t('editor.alertConfirmDelete'))) {
-                    buildings.splice(i, 1);
-                    renderTable();
-                    draw();
-                }
+                deleteBuildingAtIndex(i, { confirm: true });
             });
             tdOps.appendChild(btnSplit);
             tdOps.appendChild(btnDel);
@@ -1201,6 +1443,7 @@
             tableBody.appendChild(tr);
         });
 
+        syncBuildingRowState();
         scheduleBuildingTableAutosize();
     }
 
@@ -2384,6 +2627,13 @@
     });
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && splitState.open) closeSplitModal();
+        const isDeleteKey = e.key === 'Delete' || e.key === 'Del' || e.code === 'Delete';
+        const canDeleteSelectedBuilding = mode === 'idle' || (mode === 'drawing' && currentPoly.length === 0);
+        if (!isDeleteKey || splitState.open || !canDeleteSelectedBuilding) return;
+        if (isEditableElement(document.activeElement)) return;
+        if (selectedBuildingIndex === -1) return;
+        e.preventDefault();
+        deleteBuildingAtIndex(selectedBuildingIndex, { confirm: true });
     });
 
     splitBar.addEventListener('pointermove', (e) => {

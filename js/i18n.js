@@ -187,7 +187,11 @@ const i18n = (function() {
                 alertImportMissingTransform: '导入失败：缺少 scaleRatio 或 origin',
                 alertInvalidDistance: '请输入正确的实际距离，并确保两点不重合。',
                 alertConfirmDelete: '确定删除该楼栋吗？',
+                alertInvalidDropFile: '不支持的文件类型，请拖入 JSON 或图片文件。',
                 
+                // 拖放
+                dragDropLabel: '拖入 JSON 导入数据\n拖入图片作为规划底图',
+
                 // 缩放信息
                 zoomInfo: '缩放',
 
@@ -386,7 +390,11 @@ const i18n = (function() {
                 alertImportMissingTransform: 'Import failed: missing scaleRatio or origin.',
                 alertInvalidDistance: 'Please enter a valid actual distance and ensure the two points are not coincident.',
                 alertConfirmDelete: 'Are you sure you want to delete this building?',
-                
+                alertInvalidDropFile: 'Unsupported file type. Please drop a JSON or image file.',
+
+                // Drag & drop
+                dragDropLabel: 'Drop JSON to import data\nDrop image as plan background',
+
                 // Zoom info
                 zoomInfo: 'Zoom',
 

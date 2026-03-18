@@ -423,6 +423,52 @@
         });
     }
 
+    // ========== 拖放支持 / Drag & Drop ==========
+    function loadImageFile(file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            image.onload = () => {
+                applyLoadedPlanImage();
+            };
+            image.src = event.target.result;
+        };
+        reader.onerror = () => {
+            alert(i18n.t('viewer.errorFileRead'));
+        };
+        reader.readAsDataURL(file);
+    }
+
+    wrapper.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        wrapper.setAttribute('data-drag-label', i18n.t('editor.dragDropLabel'));
+        wrapper.classList.add('drag-over');
+    });
+
+    wrapper.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+
+    wrapper.addEventListener('dragleave', (e) => {
+        if (!wrapper.contains(e.relatedTarget)) {
+            wrapper.classList.remove('drag-over');
+        }
+    });
+
+    wrapper.addEventListener('drop', (e) => {
+        e.preventDefault();
+        wrapper.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        const name = file.name.toLowerCase();
+        if (name.endsWith('.json') || file.type === 'application/json') {
+            importJsonFile(file);
+        } else if (file.type.startsWith('image/')) {
+            loadImageFile(file);
+        } else {
+            alert(i18n.t('editor.alertInvalidDropFile'));
+        }
+    });
+
     // ========== 视图控制 ==========
     function resetView() {
         const padding = isImageLoaded ? 40 : 0;

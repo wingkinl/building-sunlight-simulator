@@ -162,6 +162,30 @@ body.no-plan-image #globalToolbar button:disabled:hover {
     cursor: grabbing;
 }
 
+#canvas-wrapper.drag-over {
+    outline: 3px dashed #4a9eff;
+    outline-offset: -3px;
+    background: #d0e8ff;
+}
+
+#canvas-wrapper.drag-over::after {
+    content: attr(data-drag-label);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(74, 158, 255, 0.92);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 16px 32px;
+    border-radius: 10px;
+    pointer-events: none;
+    white-space: pre-line;
+    text-align: center;
+    z-index: 100;
+}
+
 canvas {
     background: #eef1f4;
     display: block;

@@ -306,8 +306,13 @@
         canvas.width = image.width;
         canvas.height = image.height;
         isImageLoaded = true;
+        updateToolbarContrastState();
         resetView();
         draw();
+    }
+
+    function updateToolbarContrastState() {
+        document.body.classList.toggle('no-plan-image', !isImageLoaded);
     }
 
     fileInput.addEventListener('change', (e) => {
@@ -2446,6 +2451,7 @@
         initSidebarTabs();
         initCitySelector();
         initLanguageSwitcher();
+        updateToolbarContrastState();
         
         // 初始化画布大小（无图像时）
         if (!isImageLoaded) {

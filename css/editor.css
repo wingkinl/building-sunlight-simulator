@@ -116,6 +116,25 @@ body {
     color: #07271a;
 }
 
+body.no-plan-image #globalToolbar button {
+    border-color: rgba(18, 34, 50, 0.26);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 252, 255, 0.92));
+    color: #0f2233;
+    box-shadow: 0 4px 14px rgba(11, 26, 45, 0.17), inset 0 0 0 1px rgba(255, 255, 255, 0.82);
+}
+
+body.no-plan-image #globalToolbar button:hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(242, 248, 255, 0.95));
+    box-shadow: 0 6px 18px rgba(11, 26, 45, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.88);
+}
+
+body.no-plan-image #globalToolbar button:disabled,
+body.no-plan-image #globalToolbar button:disabled:hover {
+    border-color: rgba(18, 34, 50, 0.16);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(244, 248, 252, 0.8));
+    box-shadow: 0 2px 8px rgba(11, 26, 45, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+}
+
 .toolbar-hidden-input {
     display: none;
 }
@@ -123,7 +142,7 @@ body {
 /* 左侧画布区 */
 #canvas-wrapper {
     flex: 1;
-    background: #f0f0f0;
+    background: #dde3e8;
     position: relative;
     overflow: hidden;
     cursor: grab;
@@ -134,7 +153,7 @@ body {
 }
 
 canvas {
-    background: white;
+    background: #eef1f4;
     display: block;
     transform-origin: 0 0;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);

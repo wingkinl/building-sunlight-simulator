@@ -279,13 +279,38 @@
         const t = (text ?? '').toString().trim();
         if (!t) return null;
 
+        const size = 512;
         const canvas = document.createElement('canvas');
-        const size = 256;
         canvas.width = size;
         canvas.height = size / 2;
         const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
 
-        const r = 28, w = size - 24, h = (size / 2) - 24, x0 = 12, y0 = 12;
+        const margin = 24;
+        const r = 56;
+        const w = size - margin * 2;
+        const h = (size / 2) - margin * 2;
+        const x0 = margin;
+        const y0 = margin;
+
+        let fontSize = 96;
+        const minFontSize = 48;
+        const maxTextWidth = w - 28;
+        let renderText = t;
+
+        ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+        while (fontSize > minFontSize && ctx.measureText(renderText).width > maxTextWidth) {
+            fontSize -= 2;
+            ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+        }
+
+        if (ctx.measureText(renderText).width > maxTextWidth) {
+            while (renderText.length > 1 && ctx.measureText(renderText + '…').width > maxTextWidth) {
+                renderText = renderText.slice(0, -1);
+            }
+            renderText += '…';
+        }
+
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
         ctx.beginPath();
         ctx.moveTo(x0 + r, y0);
@@ -296,15 +321,16 @@
         ctx.closePath();
         ctx.fill();
 
-        ctx.font = "bold 72px Arial, Helvetica, sans-serif";
+        ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
         ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(t, size / 2, (size / 4) + 2);
+        ctx.fillText(renderText, size / 2, (size / 4) + 2);
 
         const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true }));
-        sprite.scale.set(12, 6, 1);
+        sprite.scale.set(16, 8, 1);
         sprite.position.set(x, y + 4, z);
         sprite.userData.type = 'label';
         return sprite;

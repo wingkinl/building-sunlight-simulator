@@ -37,6 +37,8 @@
 
     // 网格
     const gridHelper = new THREE.GridHelper(2000, 100, 0xcfd8e3, 0xe9eff5);
+    // Keep grid slightly above ground plane to avoid z-fighting flicker.
+    gridHelper.position.y = 0.02;
     scene.add(gridHelper);
 
     // 创建罗盘指南针

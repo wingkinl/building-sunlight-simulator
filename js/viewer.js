@@ -169,6 +169,13 @@
     const heatmapGroup = new THREE.Group();
     scene.add(heatmapGroup);
 
+    const HEATMAP_BASE_OPACITY = 0.85;
+    const HEATMAP_HIGHLIGHT_OPACITY = 1.0;
+    const HEATMAP_EDGE_LOCK_RATIO = 0.08;
+    const HEATMAP_EDGE_LOCK_MIN = 0.03;
+    const HEATMAP_EDGE_LOCK_MAX = 0.16;
+    const HEATMAP_OCCLUSION_EPS = 0.8;
+
     // ========== 状态变量 ==========
     let LATITUDE = 36.65;
     let showOwnOnly = false;
@@ -176,6 +183,7 @@
     let sunlightResults = null; // 存储日照计算结果
     let showHeatmap = false;
     let customDeclination = null; // 存储自定义日期的赤纬角
+    let hoverOccluderMeshes = [];
 
     // ========== 纹理与材质工具 ==========
     // advancedDividerUs: optional array of U-values [0..1] where cut-line dividers
@@ -803,6 +811,24 @@
         return meshes;
     }
 
+    function refreshHoverOccluderMeshes() {
+        hoverOccluderMeshes = collectBuildingMeshes();
+    }
+
+    function filterHeatHitsByOcclusion(raycaster, heatHits) {
+        if (!Array.isArray(heatHits) || heatHits.length === 0) return [];
+        if (!Array.isArray(hoverOccluderMeshes) || hoverOccluderMeshes.length === 0) return heatHits;
+
+        const buildingHits = raycaster.intersectObjects(hoverOccluderMeshes, true);
+        const nearestBuildingHit = buildingHits.find(h => h && h.distance > 1e-6);
+        if (!nearestBuildingHit) return heatHits;
+
+        const maxAcceptedDistance = nearestBuildingHit.distance + HEATMAP_OCCLUSION_EPS;
+        const filtered = heatHits.filter(h => h && h.distance <= maxAcceptedDistance);
+
+        return filtered;
+    }
+
     /**
      * 检查某点在某时刻是否有日照
      */
@@ -999,6 +1025,30 @@
         return new THREE.Color(r / 255, g / 255, b / 255);
     }
 
+    function makeApartmentKey(data) {
+        return `${data.buildingName}::${data.floor}::${data.unit}`;
+    }
+
+    function isIntersectionNearCellEdge(intersection) {
+        const obj = intersection?.object;
+        if (!obj || !obj.geometry || typeof obj.worldToLocal !== 'function' || !intersection.point) {
+            return false;
+        }
+
+        const widthParam = obj.geometry.parameters?.width;
+        if (!isFinite(widthParam) || widthParam <= 0) return false;
+
+        const localPoint = obj.worldToLocal(intersection.point.clone());
+        const halfWidth = widthParam * 0.5;
+        const edgeGap = halfWidth - Math.abs(localPoint.x);
+        const lockBand = Math.max(
+            HEATMAP_EDGE_LOCK_MIN,
+            Math.min(HEATMAP_EDGE_LOCK_MAX, widthParam * HEATMAP_EDGE_LOCK_RATIO)
+        );
+
+        return edgeGap >= -1e-4 && edgeGap <= lockBand;
+    }
+
     /**
      * 创建热力图显示层 - 贴在南面墙上（户号从东向西）
      */
@@ -1021,7 +1071,7 @@
                 color: color,
                 side: THREE.DoubleSide,
                 transparent: true,
-                opacity: 0.85,
+                opacity: HEATMAP_BASE_OPACITY,
                 depthTest: true,
                 polygonOffset: true,
                 polygonOffsetFactor: -1,
@@ -1069,7 +1119,9 @@
                 floor: point.floor,
                 unit: point.unit,
                 sunlightHours: point.sunlightHours,
-                unitMaxHours: point.unitMaxHours
+                unitMaxHours: point.unitMaxHours,
+                apartmentKey: makeApartmentKey(point),
+                baseOpacity: HEATMAP_BASE_OPACITY
             };
 
             heatmapGroup.add(mesh);
@@ -1085,6 +1137,9 @@
 
         if (show && sunlightResults) {
             createHeatmapLayer(sunlightResults);
+            resetHeatmapHoverState();
+        } else {
+            resetHeatmapHoverState();
         }
     }
 
@@ -1209,6 +1264,7 @@
 
     function loadBuildings(data) {
         clearGroup(buildingsGroup);
+        hoverOccluderMeshes = [];
         if (data.latitude) LATITUDE = data.latitude;
 
         if (!data || !Array.isArray(data.buildings) || data.buildings.length === 0) return;
@@ -1334,6 +1390,7 @@
         });
 
         applyVisibilityFilter(false);
+        refreshHoverOccluderMeshes();
         fitViewToBuildings();
     }
 
@@ -1523,9 +1580,10 @@
 
         raycasterClick.setFromCamera(mouse, camera);
         const intersects = raycasterClick.intersectObjects(heatmapGroup.children, false);
+        const heatHits = filterHeatHitsByOcclusion(raycasterClick, collectHeatmapHits(intersects));
 
-        if (intersects.length > 0) {
-            const obj = intersects[0].object;
+        if (heatHits.length > 0) {
+            const obj = heatHits[0].object;
             if (obj.userData.type === 'heatmapCell') {
                 showUnitInfo(obj.userData);
             }
@@ -1535,13 +1593,80 @@
     // ========== 悬停交互 ==========
     const raycasterHover = new THREE.Raycaster();
     const mouseHover = new THREE.Vector2();
+    let lastHoveredApartmentKey = null;
     let lastHoveredCell = null;
+
+    function findCellByApartmentKey(apartmentKey) {
+        if (!apartmentKey) return null;
+        for (const child of heatmapGroup.children) {
+            if (!child?.isMesh || child.userData?.type !== 'heatmapCell') continue;
+            if (child.userData.apartmentKey === apartmentKey) return child;
+        }
+        return null;
+    }
+
+    function collectHeatmapHits(intersections) {
+        return intersections.filter(it => it?.object?.userData?.type === 'heatmapCell');
+    }
+
+    function pickApartmentKeyFromAmbiguousEdge(heatHits) {
+        if (!Array.isArray(heatHits) || heatHits.length === 0) return null;
+
+        const firstHit = heatHits[0];
+        const firstData = firstHit.object?.userData;
+        const firstKey = firstData?.apartmentKey;
+        if (!firstKey) return null;
+        const anchorBuilding = firstData?.buildingName;
+        const anchorFloor = firstData?.floor;
+
+        const inAnchorFloor = (data) => {
+            if (!data) return false;
+            return data.buildingName === anchorBuilding && data.floor === anchorFloor;
+        };
+
+        // Most hits are unambiguous; keep fast path.
+        if (!isIntersectionNearCellEdge(firstHit)) return firstKey;
+
+        // On split edge, keep current highlight only if it is on the same building/floor.
+        if (lastHoveredApartmentKey) {
+            const lastCell = findCellByApartmentKey(lastHoveredApartmentKey);
+            if (inAnchorFloor(lastCell?.userData)) {
+                return lastHoveredApartmentKey;
+            }
+        }
+
+        // No stable prior lock on this floor: avoid choosing a random apartment
+        // from an ambiguous split-edge hit.
+        return null;
+    }
+
+    function setHoveredApartment(apartmentKey) {
+        if (apartmentKey === lastHoveredApartmentKey) return;
+
+        for (const child of heatmapGroup.children) {
+            if (!child?.isMesh || child.userData?.type !== 'heatmapCell') continue;
+            const isTarget = apartmentKey && child.userData?.apartmentKey === apartmentKey;
+            const targetOpacity = apartmentKey
+                ? (isTarget ? HEATMAP_HIGHLIGHT_OPACITY : (child.userData?.baseOpacity ?? HEATMAP_BASE_OPACITY))
+                : (child.userData?.baseOpacity ?? HEATMAP_BASE_OPACITY);
+
+            if (child.material && child.material.transparent) {
+                child.material.opacity = targetOpacity;
+                child.material.needsUpdate = true;
+            }
+        }
+
+        lastHoveredApartmentKey = apartmentKey || null;
+    }
+
+    function resetHeatmapHoverState() {
+        setHoveredApartment(null);
+        lastHoveredCell = null;
+    }
 
     function onCanvasMouseMove(event) {
         if (!sunlightResults || !showHeatmap) {
-            if (renderer.domElement.style.cursor === 'pointer') {
-                renderer.domElement.style.cursor = '';
-            }
+            resetHeatmapHoverState();
             return;
         }
 
@@ -1553,18 +1678,30 @@
         const intersects = raycasterHover.intersectObjects(heatmapGroup.children, false);
 
         if (intersects.length > 0) {
-            const obj = intersects[0].object;
-            if (obj.userData.type === 'heatmapCell') {
-                if (obj !== lastHoveredCell) {
-                    lastHoveredCell = obj;
-                    showUnitInfo(obj.userData);
+            const rawHeatHits = collectHeatmapHits(intersects);
+            const heatHits = filterHeatHitsByOcclusion(raycasterHover, rawHeatHits);
+            if (heatHits.length > 0) {
+                const prevApartmentKey = lastHoveredApartmentKey;
+
+                const apartmentKey = pickApartmentKeyFromAmbiguousEdge(heatHits);
+                if (apartmentKey) {
+                    const selectedObj = heatHits.find(h => h.object.userData.apartmentKey === apartmentKey)?.object
+                        || findCellByApartmentKey(apartmentKey);
+                    const changedApartment = apartmentKey !== prevApartmentKey;
+
+                    setHoveredApartment(apartmentKey);
+
+                    if (changedApartment && selectedObj) {
+                        showUnitInfo(selectedObj.userData);
+                    }
+                    if (selectedObj) lastHoveredCell = selectedObj;
                 }
                 return;
             }
         }
 
-        renderer.domElement.style.cursor = '';
-        lastHoveredCell = null;
+        // Cursor is no longer over a valid heatmap/building hit, so clear highlight.
+        resetHeatmapHoverState();
         // Panel remains visible when cursor moves off a cell,
         // consistent with click behavior; user can close it manually.
     }
@@ -1686,6 +1823,10 @@
 
         // 悬停画布显示热力图结果面板
         renderer.domElement.addEventListener('mousemove', onCanvasMouseMove);
+        renderer.domElement.addEventListener('mouseleave', () => {
+            resetHeatmapHoverState();
+            renderer.domElement.style.cursor = '';
+        });
 
         // 侧边栏收起/展开
         const controlsPanel = document.getElementById('controls');

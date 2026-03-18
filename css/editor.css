@@ -1,6 +1,4 @@
 :root {
-    --top-pane-height: 44vh;
-    --table-height: 28vh;
     --primary-color: #007bff;
     --secondary-color: #6c757d;
     --success-color: #28a745;
@@ -55,10 +53,77 @@ body {
     height: 28px;
 }
 
+#globalToolbar {
+    position: absolute;
+    top: 16px;
+    left: 76px;
+    right: auto;
+    max-width: calc(100vw - 560px);
+    padding: 0;
+    border: none;
+    background: transparent;
+    backdrop-filter: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 90;
+    overflow-x: auto;
+}
+
+#globalToolbar button {
+    width: auto;
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    border-radius: 11px;
+    color: #1b2a39;
+    background: rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+#globalToolbar button:hover {
+    background: rgba(255, 255, 255, 0.32);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#globalToolbar button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+#globalToolbar button:disabled:hover {
+    background: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#globalToolbar button.secondary,
+#globalToolbar button.info,
+#globalToolbar button.success,
+#globalToolbar button.btn-outline {
+    color: #172635;
+}
+
+#globalToolbar #btnDrawMode.is-drawing {
+    border-color: rgba(85, 255, 175, 0.55);
+    background: rgba(52, 211, 153, 0.28);
+    color: #07271a;
+}
+
+.toolbar-hidden-input {
+    display: none;
+}
+
 /* 左侧画布区 */
 #canvas-wrapper {
     flex: 1;
-    background: #333;
+    background: #f0f0f0;
     position: relative;
     overflow: hidden;
     cursor: grab;
@@ -70,12 +135,13 @@ body {
 
 canvas {
     background: white;
-    display: none;
+    display: block;
     transform-origin: 0 0;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
 #empty-tip {
+    display: none;
     position: absolute;
     top: 50%;
     left: 50%;
@@ -111,10 +177,66 @@ canvas {
     gap: 8px;
 }
 
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.sidebar-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid #dbe3ea;
+    border-radius: 10px;
+    background: #eef3f7;
+}
+
+.sidebar-tab-btn {
+    width: auto;
+    margin: 0;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: transparent;
+    color: #556371;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.sidebar-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.65);
+    color: #2c3e50;
+}
+
+.sidebar-tab-btn.active {
+    background: #ffffff;
+    color: #0056b3;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+#sidebarContent {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+.sidebar-tab-panel {
+    display: none;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar-tab-panel.active {
+    display: flex;
+    flex-direction: column;
+}
+
 /* 上半部分 */
 #topPane {
-    height: var(--top-pane-height);
-    min-height: 180px;
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     border: 1px solid #e9ecef;
     border-radius: 8px;
@@ -122,30 +244,14 @@ canvas {
     padding: 10px;
 }
 
-/* 分隔条 */
-.resizer {
-    height: 8px;
-    cursor: row-resize;
-    border-radius: 6px;
-    background: repeating-linear-gradient(90deg, #d7dee6 0, #d7dee6 6px, #e7edf3 6px, #e7edf3 12px);
-    box-shadow: inset 0 0 0 1px #cfd6dd;
-    user-select: none;
-}
-
-.resizer.active {
-    background: #c7d7e7;
-    box-shadow: inset 0 0 0 1px #9fb8d3;
-}
-
 /* 下半部分 */
 #bottomPane {
     flex: 1;
-    min-height: 200px;
-    overflow: auto;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding-bottom: 10px;
 }
 
 h3 {
@@ -651,8 +757,8 @@ button:disabled {
 }
 
 #table-wrapper {
-    height: var(--table-height);
-    min-height: 120px;
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     border: 1px solid #eee;
     border-radius: 6px;
@@ -725,6 +831,12 @@ td .btn-mini.btn-outline:hover {
         height: 42px;
     }
 
+    #globalToolbar {
+        top: 8px;
+        left: 58px;
+        max-width: calc(100vw - 66px);
+    }
+
     .github-link svg {
         width: 24px;
         height: 24px;
@@ -740,12 +852,12 @@ td .btn-mini.btn-outline:hover {
         overflow: hidden;
     }
 
-    #topPane {
-        max-height: 55vh;
+    #sidebarContent {
+        min-height: 0;
     }
 
-    #table-wrapper {
-        max-height: 55vh;
+    .sidebar-tabs {
+        grid-template-columns: 1fr;
     }
 }
 

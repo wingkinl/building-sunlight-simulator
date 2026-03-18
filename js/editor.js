@@ -14,6 +14,7 @@
     const canvas = document.getElementById('editorCanvas');
     const ctx = canvas.getContext('2d');
     const fileInput = document.getElementById('fileInput');
+    const btnUploadPlan = document.getElementById('btnUploadPlan');
     const zoomInfo = document.getElementById('zoom-info');
     const emptyTip = document.getElementById('empty-tip');
     const jsonImportInput = document.getElementById('jsonImportInput');
@@ -56,6 +57,8 @@
     const defIsThisCommunityEl = document.getElementById('defIsThisCommunity');
     const btnApplyDefaultsAll = document.getElementById('btnApplyDefaultsAll');
     const chkUseDefaults = document.getElementById('chkUseDefaults');
+    const sidebarTabButtons = document.querySelectorAll('.sidebar-tab-btn');
+    const sidebarTabPanels = document.querySelectorAll('.sidebar-tab-panel');
 
     // ========== 状态变量 ==========
     let image = new Image();
@@ -276,6 +279,26 @@
         citySelectEl.value = '';
     }
 
+    function setActiveSidebarTab(tabName) {
+        sidebarTabButtons.forEach(btn => {
+            const isActive = btn.dataset.tab === tabName;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        sidebarTabPanels.forEach(panel => {
+            panel.classList.toggle('active', panel.dataset.panel === tabName);
+        });
+    }
+
+    function initSidebarTabs() {
+        sidebarTabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                setActiveSidebarTab(btn.dataset.tab || 'setup');
+            });
+        });
+    }
+
     // ========== 图片加载 ==========
     function applyLoadedPlanImage() {
         canvas.style.display = 'block';
@@ -283,7 +306,6 @@
         canvas.width = image.width;
         canvas.height = image.height;
         isImageLoaded = true;
-        document.getElementById('btnStartScale').disabled = false;
         resetView();
         draw();
     }
@@ -304,10 +326,15 @@
         reader.readAsDataURL(file);
     });
 
+    if (btnUploadPlan && fileInput) {
+        btnUploadPlan.addEventListener('click', () => {
+            fileInput.click();
+        });
+    }
+
     // ========== 视图控制 ==========
     function resetView() {
-        if (!isImageLoaded) return;
-        const padding = 40;
+        const padding = isImageLoaded ? 40 : 0;
         const wRatio = (wrapper.clientWidth - padding) / canvas.width;
         const hRatio = (wrapper.clientHeight - padding) / canvas.height;
         viewScale = Math.min(wRatio, hRatio, 1);
@@ -342,7 +369,6 @@
 
     // ========== 鼠标/滚轮事件 ==========
     wrapper.addEventListener('wheel', (e) => {
-        if (!isImageLoaded) return;
         e.preventDefault();
         const zoomSpeed = 0.1;
         const delta = e.deltaY > 0 ? (1 - zoomSpeed) : (1 + zoomSpeed);
@@ -359,7 +385,6 @@
     }, { passive: false });
 
     wrapper.addEventListener('mousedown', (e) => {
-        if (!isImageLoaded) return;
         const isSpacePressed = e.getModifierState && e.getModifierState(" ");
 
         // 拖拽视图
@@ -371,6 +396,9 @@
             e.preventDefault();
             return;
         }
+
+        // 无底图时，仍允许标定与绘制；其余模式不处理点击
+        if (!isImageLoaded && mode !== 'scaling' && mode !== 'drawing') return;
 
         // 左键操作
         if (e.button === 0) {
@@ -399,7 +427,6 @@
     });
 
     wrapper.addEventListener('dblclick', (e) => {
-        if (!isImageLoaded) return;
         if (mode === 'drawing' && e.button === 0) {
             if (currentPoly.length >= 3) {
                 finishPolygon();
@@ -418,9 +445,9 @@
             updateTransform();
             return;
         }
-        if (!isImageLoaded) return;
+        if (!isImageLoaded && mode !== 'scaling' && mode !== 'drawing') return;
         mousePos = getCanvasCoordinates(e);
-        if (mode === 'drawing') draw();
+        if (mode === 'drawing' || mode === 'scaling') draw();
     });
 
     window.addEventListener('mouseup', () => {
@@ -443,7 +470,6 @@
     }
 
     wrapper.addEventListener('touchstart', (e) => {
-        if (!isImageLoaded) return;
         e.preventDefault();
 
         if (e.touches.length === 2) {
@@ -481,7 +507,6 @@
     }, { passive: false });
 
     wrapper.addEventListener('touchmove', (e) => {
-        if (!isImageLoaded) return;
         e.preventDefault();
 
         if (e.touches.length === 2 && lastTouchDist > 0) {
@@ -513,7 +538,7 @@
                 lastMouseX = touch.clientX;
                 lastMouseY = touch.clientY;
                 updateTransform();
-            } else if (mode === 'drawing') {
+            } else if (mode === 'drawing' || mode === 'scaling') {
                 mousePos = getTouchCanvasCoords(touch);
                 draw();
             }
@@ -521,8 +546,6 @@
     }, { passive: false });
 
     wrapper.addEventListener('touchend', (e) => {
-        if (!isImageLoaded) return;
-
         if (e.touches.length === 0) {
             lastTouchDist = 0;
             if (isDragging) {
@@ -535,8 +558,11 @@
     // ========== 绘图函数 ==========
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (!isImageLoaded) return;
-        ctx.drawImage(image, 0, 0);
+        
+        // 如果有图片，先绘制背景图片
+        if (isImageLoaded) {
+            ctx.drawImage(image, 0, 0);
+        }
 
         // 绘制已完成的楼栋
         buildings.forEach(b => {
@@ -679,7 +705,7 @@
         scaleRatio = distReal / distPx;
         document.getElementById('scaleStatus').innerText = `${i18n.t('editor.scaleSet')} (1px ≈ ${scaleRatio.toFixed(4)}m)`;
         document.getElementById('scaleInputArea').style.display = 'none';
-        toggleDrawMode(true);
+        updateDrawModeButtonState();
         renderTable();
     });
 
@@ -690,20 +716,32 @@
     });
 
     function toggleDrawMode(active) {
+        if (active && scaleRatio <= 0) {
+            alert(i18n.t('editor.alertNoScale'));
+            return;
+        }
         if (active) {
             mode = 'drawing';
             btnDrawMode.innerText = i18n.t('editor.modeDrawing');
-            btnDrawMode.style.background = "#28a745";
-            btnDrawMode.style.color = "white";
+            btnDrawMode.classList.add('is-drawing');
         } else {
             mode = 'idle';
             btnDrawMode.innerText = i18n.t('editor.modeIdle');
-            btnDrawMode.style.background = "#6c757d";
-            btnDrawMode.style.color = "white";
+            btnDrawMode.classList.remove('is-drawing');
             currentPoly = [];
             draw();
         }
         updateCursor();
+    }
+
+    function updateDrawModeButtonState() {
+        if (scaleRatio > 0) {
+            btnDrawMode.disabled = false;
+            btnDrawMode.removeAttribute('title');
+        } else {
+            btnDrawMode.disabled = true;
+            btnDrawMode.setAttribute('title', i18n.t('editor.calibrateFirstTooltip') || '需要先标定比例尺');
+        }
     }
 
     // ========== 表格渲染 ==========
@@ -1003,9 +1041,10 @@
 
         buildings = imported;
         updateScaleStatus();
-        toggleDrawMode(true);
+        updateDrawModeButtonState();
+        toggleDrawMode(false);
         renderTable();
-        if (isImageLoaded) draw();
+        draw();
     }
 
     function importJsonFile(file) {
@@ -2402,99 +2441,22 @@
         });
     });
 
-    // ========== 面板拖拽调整高度 ==========
-    const topPane = document.getElementById('topPane');
-    const bottomPane = document.getElementById('bottomPane');
-    const outerResizer = document.getElementById('outerResizer');
-    const tableWrapper = document.getElementById('table-wrapper');
-    const tableResizer = document.getElementById('tableResizer');
-
-    let outerResize = { active: false, startY: 0, startHeight: 0 };
-    let innerResize = { active: false, startY: 0, startHeight: 0 };
-
-    function setTopPaneHeight(px) {
-        const sidebar = document.getElementById('sidebar');
-        const minPx = 160;
-        const maxPx = Math.max(160, sidebar.clientHeight - 240);
-        const clamped = Math.max(minPx, Math.min(px, maxPx));
-        topPane.style.height = clamped + 'px';
-        clampTableHeightToBottomPane();
-    }
-
-    function tableMaxHeight() {
-        const reserve = 130;
-        return Math.max(120, bottomPane.clientHeight - reserve);
-    }
-
-    function setTableHeight(px) {
-        const clamped = Math.max(120, Math.min(px, tableMaxHeight()));
-        tableWrapper.style.height = clamped + 'px';
-    }
-
-    function clampTableHeightToBottomPane() {
-        const maxH = tableMaxHeight();
-        const curH = tableWrapper.getBoundingClientRect().height;
-        if (curH > maxH) {
-            tableWrapper.style.height = maxH + 'px';
-        }
-    }
-
-    outerResizer.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        outerResize.active = true;
-        outerResize.startY = e.clientY;
-        outerResize.startHeight = topPane.getBoundingClientRect().height;
-        outerResizer.classList.add('active');
-        document.body.style.cursor = 'row-resize';
-    });
-
-    tableResizer.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        innerResize.active = true;
-        innerResize.startY = e.clientY;
-        innerResize.startHeight = tableWrapper.getBoundingClientRect().height;
-        tableResizer.classList.add('active');
-        document.body.style.cursor = 'row-resize';
-    });
-
-    window.addEventListener('mousemove', (e) => {
-        if (outerResize.active) {
-            const delta = e.clientY - outerResize.startY;
-            setTopPaneHeight(outerResize.startHeight + delta);
-        }
-        if (innerResize.active) {
-            const delta = e.clientY - innerResize.startY;
-            setTableHeight(innerResize.startHeight + delta);
-        }
-    });
-
-    window.addEventListener('mouseup', () => {
-        if (outerResize.active) {
-            outerResize.active = false;
-            outerResizer.classList.remove('active');
-            document.body.style.cursor = '';
-        }
-        if (innerResize.active) {
-            innerResize.active = false;
-            tableResizer.classList.remove('active');
-            document.body.style.cursor = '';
-        }
-    });
-
     // ========== 初始化 ==========
     window.addEventListener('load', () => {
+        initSidebarTabs();
         initCitySelector();
         initLanguageSwitcher();
-
-        const initialTop = Math.max(160, Math.min(window.innerHeight * 0.6, window.innerHeight * 0.44));
-        topPane.style.height = initialTop + 'px';
-        const initialTable = Math.max(120, Math.min(window.innerHeight * 0.7, window.innerHeight * 0.28));
-        tableWrapper.style.height = initialTable + 'px';
-        clampTableHeightToBottomPane();
-    });
-
-    window.addEventListener('resize', () => {
-        clampTableHeightToBottomPane();
+        
+        // 初始化画布大小（无图像时）
+        if (!isImageLoaded) {
+            const wrapper = document.getElementById('canvas-wrapper');
+            canvas.width = Math.max(800, wrapper.clientWidth);
+            canvas.height = Math.max(600, wrapper.clientHeight);
+            resetView();
+            draw();
+        }
+        
+        updateDrawModeButtonState();
     });
 
     // ========== 语言切换功能 ==========
@@ -2560,6 +2522,11 @@
         // 更新绘制模式按钮
         updateDrawModeButton();
 
+        // 更新按钮工具提示
+        if (scaleRatio <= 0) {
+            btnDrawMode.setAttribute('title', i18n.t('editor.calibrateFirstTooltip'));
+        }
+
         renderTable();
     }
 
@@ -2583,10 +2550,13 @@
         if (mode === 'drawing') {
             btnDrawMode.setAttribute('data-i18n', 'editor.modeDrawing');
             btnDrawMode.innerText = i18n.t('editor.modeDrawing');
+            btnDrawMode.classList.add('is-drawing');
         } else {
             btnDrawMode.setAttribute('data-i18n', 'editor.modeIdle');
             btnDrawMode.innerText = i18n.t('editor.modeIdle');
+            btnDrawMode.classList.remove('is-drawing');
         }
+        updateDrawModeButtonState();
     }
 
 })();

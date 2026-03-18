@@ -118,6 +118,10 @@ const i18n = (function() {
                 title: '楼盘规划图配置器',
                 emptyTip: '请在右侧上传图片开始规划',
                 pageTitle: '🛠️ 楼盘数据配置',
+                toolbarUpload: '上传图纸',
+                tabSetup: '设置',
+                tabBuildings: '楼栋',
+                tabImportExport: '导入/导出',
                 
                 // 步骤1
                 step1Title: '1. 上传规划图/总平图',
@@ -137,9 +141,10 @@ const i18n = (function() {
                 step3Title: '3. 绘制楼栋',
                 step3Hint: '🖱️ 滚轮缩放，按住中键或空格拖拽视图',
                 step3Operation: '操作: 左键加点，左键双击结束；右键撤销上个点。',
-                modeIdle: '当前: ✋ 浏览模式',
-                modeDrawing: '当前: ✏️ 正在绘制 (双击结束 / 右键撤销)',
+                modeIdle: '浏览模式',
+                modeDrawing: '绘制模式',
                 resetView: '⟲ 重置视角',
+                calibrateFirstTooltip: '需要先标定比例尺',
                 
                 // 步骤4
                 step4Title: '4. 全局参数 & 默认值',
@@ -169,8 +174,8 @@ const i18n = (function() {
                 namePlaceholder: '输入名称（如：1号楼/配建/幼儿园）',
                 
                 // 导出
-                exportButton: '导出 JSON 配置',
-                importJsonButton: '导入 JSON',
+                exportButton: '导出',
+                importJsonButton: '导入',
                 exportFilenameLabel: '导出文件名',
                 
                 // 提示信息
@@ -312,6 +317,10 @@ const i18n = (function() {
                 title: 'Building Plan Configurator',
                 emptyTip: 'Please upload an image on the right to start planning',
                 pageTitle: '🛠️ Building Data Configuration',
+                toolbarUpload: 'Upload Plan',
+                tabSetup: 'Setup',
+                tabBuildings: 'Buildings',
+                tabImportExport: 'Import/Export',
                 
                 // Step 1
                 step1Title: '1. Upload Plan/Site Plan',
@@ -331,9 +340,10 @@ const i18n = (function() {
                 step3Title: '3. Draw Buildings',
                 step3Hint: '🖱️ Scroll to zoom, hold middle button or space to drag view',
                 step3Operation: 'Operation: Left click to add point, double-click to finish; right click to undo last point.',
-                modeIdle: 'Current: ✋ Browse Mode',
-                modeDrawing: 'Current: ✏️ Drawing (Double-click to finish / Right-click to undo)',
+                modeIdle: 'Browse Mode',
+                modeDrawing: 'Draw Mode',
                 resetView: '⟲ Reset View',
+                calibrateFirstTooltip: 'Calibrate scale first',
                 
                 // Step 4
                 step4Title: '4. Global Parameters & Defaults',
@@ -363,8 +373,8 @@ const i18n = (function() {
                 namePlaceholder: 'Enter name (e.g., Building 1/Ancillary/Kindergarten)',
                 
                 // Export
-                exportButton: 'Export JSON Configuration',
-                importJsonButton: 'Import JSON',
+                exportButton: 'Export',
+                importJsonButton: 'Import',
                 exportFilenameLabel: 'Export Filename',
                 
                 // Alert messages

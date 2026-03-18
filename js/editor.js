@@ -130,6 +130,61 @@
         return cleaned.map(v => v / sum);
     }
 
+    function normalizeRatiosForUnits(ratios, units) {
+        const count = Math.max(1, parseInt(units || 1, 10));
+        if (!Array.isArray(ratios) || ratios.length !== count) return null;
+        return normalizeRatios(ratios).slice(0, count);
+    }
+
+    function ratiosMatch(a, b, eps = 1e-6) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (Math.abs((Number(a[i]) || 0) - (Number(b[i]) || 0)) > eps) return false;
+        }
+        return true;
+    }
+
+    function getSharedFirstFloorRatios(unitRatiosPerFloor, floors, units) {
+        const totalFloors = Math.max(1, parseInt(floors || 1, 10));
+        if (!Array.isArray(unitRatiosPerFloor) || unitRatiosPerFloor.length === 0) return null;
+        const first = normalizeRatiosForUnits(unitRatiosPerFloor[0], units);
+        if (!first) return null;
+        let explicitMatches = 0;
+        for (let i = 1; i < totalFloors; i++) {
+            const next = unitRatiosPerFloor[i];
+            if (next == null) continue;
+            const normalized = normalizeRatiosForUnits(next, units);
+            if (!normalized || !ratiosMatch(normalized, first)) return null;
+            explicitMatches++;
+        }
+        if (explicitMatches !== 0 && explicitMatches !== totalFloors - 1) return null;
+        return first;
+    }
+
+    function getFloorRatios(unitRatiosPerFloor, floorIndex, floors, units) {
+        const direct = normalizeRatiosForUnits(unitRatiosPerFloor?.[floorIndex], units);
+        if (direct) return direct;
+        if (floorIndex > 0) {
+            const sharedFirst = getSharedFirstFloorRatios(unitRatiosPerFloor, floors, units);
+            if (sharedFirst) return sharedFirst.slice();
+        }
+        return null;
+    }
+
+    function serializeSplitRatiosPerFloor(unitRatiosPerFloor, floors, units) {
+        const perFloor = [];
+        let hasAny = false;
+        for (let fi = 0; fi < floors; fi++) {
+            const normalized = normalizeRatiosForUnits(unitRatiosPerFloor?.[fi], units);
+            perFloor.push(normalized);
+            if (normalized) hasAny = true;
+        }
+        if (!hasAny) return null;
+        const sharedFirst = getSharedFirstFloorRatios(perFloor, floors, units);
+        if (sharedFirst) return [sharedFirst.slice()];
+        return perFloor;
+    }
+
     function clampHandlePos(pos, left, right) {
         const p = Number(pos);
         if (!isFinite(p)) return left;
@@ -1199,18 +1254,13 @@
                 let unitRatiosPerFloor = null;
                 if (Array.isArray(b.unitRatiosPerFloor) && b.unitRatiosPerFloor.length > 0) {
                     const floors = Math.max(1, parseInt(b.floors || 1, 10));
-                    const per = [];
-                    for (let fi = 0; fi < floors; fi++) {
-                        const units = Math.max(1, parseInt(b.units || 1, 10));
-                        const r = b.unitRatiosPerFloor[fi];
-                        if (Array.isArray(r) && r.length === units) {
-                            const nr = normalizeRatios(r).map(x => Utils.roundTo(x, 6));
-                            per.push(nr);
-                        } else {
-                            per.push(null);
-                        }
+                    const units = Math.max(1, parseInt(b.units || 1, 10));
+                    const serialized = serializeSplitRatiosPerFloor(b.unitRatiosPerFloor, floors, units);
+                    if (Array.isArray(serialized) && serialized.length > 0) {
+                        unitRatiosPerFloor = serialized.map(r =>
+                            Array.isArray(r) ? r.map(x => Utils.roundTo(x, 6)) : null
+                        );
                     }
-                    if (per.some(v => Array.isArray(v))) unitRatiosPerFloor = per;
                 }
 
                 return {
@@ -1371,14 +1421,8 @@
         const floors = Math.max(1, parseInt(b.floors || 1, 10));
         const units = Math.max(1, parseInt(b.units || 1, 10));
 
-        if (!Array.isArray(b.unitRatiosPerFloor) || b.unitRatiosPerFloor.length !== floors) {
-            b.unitRatiosPerFloor = new Array(floors).fill(null);
-        }
-
         splitState.draftRatiosPerFloor = new Array(floors).fill(null).map((_, i) => {
-            const r = b.unitRatiosPerFloor?.[i];
-            if (Array.isArray(r) && r.length === units) return normalizeRatios(r);
-            return null;
+            return getFloorRatios(b.unitRatiosPerFloor, i, floors, units);
         });
         splitState.draftAreasPerFloor = new Array(floors).fill(null);
 
@@ -1447,11 +1491,6 @@
 
             const units = Math.max(1, parseInt(b.units || 1, 10));
             b.floors = nextFloors;
-
-            if (Array.isArray(b.unitRatiosPerFloor)) {
-                const old = b.unitRatiosPerFloor.slice();
-                b.unitRatiosPerFloor = new Array(nextFloors).fill(null).map((_, i) => old[i] ?? null);
-            }
 
             const oldDraftRatios = splitState.draftRatiosPerFloor.slice();
             const oldDraftAreas = splitState.draftAreasPerFloor.slice();
@@ -2698,16 +2737,8 @@
         if (!b) return;
         const floors = Math.max(1, parseInt(b.floors || 1, 10));
         const units = Math.max(1, parseInt(b.units || 1, 10));
-        if (!Array.isArray(b.unitRatiosPerFloor) || b.unitRatiosPerFloor.length !== floors) {
-            b.unitRatiosPerFloor = new Array(floors).fill(null);
-        }
         storeCurrentSplitDraft();
-        for (let fi = 0; fi < floors; fi++) {
-            const r = splitState.draftRatiosPerFloor?.[fi];
-            if (Array.isArray(r) && r.length === units) {
-                b.unitRatiosPerFloor[fi] = normalizeRatios(r).slice(0, units);
-            }
-        }
+        b.unitRatiosPerFloor = serializeSplitRatiosPerFloor(splitState.draftRatiosPerFloor, floors, units);
         b.unitSplitAngleDeg = clampAngleDeg(splitState.angleDeg);
         if (splitState.mode === 'advanced') {
             commitDraftLine();

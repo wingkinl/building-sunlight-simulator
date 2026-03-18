@@ -229,7 +229,7 @@
             } else if (!isAdvancedMode) {
                 const nUnits = Math.max(1, unitsPerFloor[f] || 1);
                 if (nUnits > 1) {
-                    const ratios = normalizeUnitRatios(unitRatiosPerFloor?.[f], nUnits);
+                    const ratios = getUnitRatiosForFloor(unitRatiosPerFloor, f, floors, nUnits);
                     let acc = 0;
                     for (let i = 0; i < nUnits - 1; i++) {
                         const r = ratios ? ratios[i] : (1.0 / nUnits);
@@ -386,6 +386,41 @@
         const sum = cleaned.reduce((a, b) => a + b, 0);
         if (sum <= 1e-9) return null;
         return cleaned.map(v => v / sum);
+    }
+
+    function unitRatiosMatch(a, b, eps = 1e-6) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (Math.abs((Number(a[i]) || 0) - (Number(b[i]) || 0)) > eps) return false;
+        }
+        return true;
+    }
+
+    function getSharedFirstFloorUnitRatios(unitRatiosPerFloor, floors, units) {
+        const totalFloors = Math.max(1, parseInt(floors || 1, 10));
+        if (!Array.isArray(unitRatiosPerFloor) || unitRatiosPerFloor.length === 0) return null;
+        const first = normalizeUnitRatios(unitRatiosPerFloor[0], units);
+        if (!first) return null;
+        let explicitMatches = 0;
+        for (let i = 1; i < totalFloors; i++) {
+            const next = unitRatiosPerFloor[i];
+            if (next == null) continue;
+            const normalized = normalizeUnitRatios(next, units);
+            if (!normalized || !unitRatiosMatch(normalized, first)) return null;
+            explicitMatches++;
+        }
+        if (explicitMatches !== 0 && explicitMatches !== totalFloors - 1) return null;
+        return first;
+    }
+
+    function getUnitRatiosForFloor(unitRatiosPerFloor, floorIndex, floors, units) {
+        const direct = normalizeUnitRatios(unitRatiosPerFloor?.[floorIndex], units);
+        if (direct) return direct;
+        if (floorIndex > 0) {
+            const sharedFirst = getSharedFirstFloorUnitRatios(unitRatiosPerFloor, floors, units);
+            if (sharedFirst) return sharedFirst.slice();
+        }
+        return null;
     }
 
     /**
@@ -697,7 +732,7 @@
 
         for (let floor = 0; floor < floors; floor++) {
             const windowHeight = floor * floorHeight + floorHeight * 0.4 + 1.2;
-            const ratios = normalizeUnitRatios(building.unitRatiosPerFloor?.[floor], units);
+            const ratios = getUnitRatiosForFloor(building.unitRatiosPerFloor, floor, floors, units);
 
             // Compute boundaries for this floor
             const boundaries = [maxProj + 1e-4];

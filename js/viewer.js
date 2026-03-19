@@ -9,15 +9,19 @@
     scene.background = new THREE.Color(CONFIG.SCENE.BACKGROUND_COLOR);
     scene.fog = new THREE.Fog(CONFIG.SCENE.FOG_COLOR, CONFIG.SCENE.FOG_NEAR, CONFIG.SCENE.FOG_FAR);
 
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000);
+    const canvasContainer = document.getElementById('canvas-container');
+    const initialWidth = canvasContainer.clientWidth || window.innerWidth;
+    const initialHeight = canvasContainer.clientHeight || window.innerHeight;
+
+    const camera = new THREE.PerspectiveCamera(45, initialWidth / initialHeight, 1, 5000);
     camera.position.set(200, 260, 320);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(initialWidth, initialHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.getElementById('canvas-container').appendChild(renderer.domElement);
+    canvasContainer.appendChild(renderer.domElement);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -1846,9 +1850,11 @@
     // ========== 窗口大小调整 ==========
     const debouncedFitView = Utils.debounce(() => fitViewToBuildings(), 150);
     window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+        const width = canvasContainer.clientWidth || window.innerWidth;
+        const height = canvasContainer.clientHeight || window.innerHeight;
+        camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setSize(width, height);
         debouncedFitView();
     });
 

@@ -22,6 +22,7 @@
     const exportFilenameEl = document.getElementById('exportFilename');
     const sidebar = document.getElementById('sidebar');
     const sidebarResizer = document.getElementById('sidebarResizer');
+    const sidebarToggle = document.getElementById('sidebarToggle');
 
     const splitModalOverlay = document.getElementById('splitModalOverlay');
     const splitModalClose = document.getElementById('splitModalClose');
@@ -84,6 +85,8 @@
         startWidth: 0,
         pointerId: null
     };
+    let sidebarLastExpandedWidth = null;
+    const sidebarMobileMql = window.matchMedia('(max-width: 768px)');
 
     let splitState = {
         open: false,
@@ -533,6 +536,7 @@
     }
 
     function setSidebarWidth(width) {
+        if (sidebar?.classList.contains('collapsed')) return;
         const nextWidth = clampSidebarWidth(width);
         document.documentElement.style.setProperty('--sidebar-width', `${nextWidth}px`);
         if (sidebarResizer) {
@@ -585,9 +589,70 @@
         sidebarResizer.addEventListener('pointercancel', releaseResize);
 
         window.addEventListener('resize', () => {
+            if (sidebar.classList.contains('collapsed')) return;
             setSidebarWidth(sidebar.getBoundingClientRect().width || SIDEBAR_MIN_WIDTH);
             sidebarResizer.setAttribute('aria-valuemax', String(getSidebarMaxWidth()));
         });
+    }
+
+    function updateSidebarToggleA11y() {
+        if (!sidebarToggle || !sidebar) return;
+        const key = sidebar.classList.contains('collapsed') ? 'common.expand' : 'common.close';
+        const text = i18n.t(key);
+        sidebarToggle.title = text;
+        sidebarToggle.setAttribute('aria-label', text);
+    }
+
+    function setSidebarCollapsed(collapsed, options = {}) {
+        if (!sidebar) return;
+
+        const restoreWidth = options.restoreWidth !== false;
+        const nextCollapsed = !!collapsed;
+        const wasCollapsed = sidebar.classList.contains('collapsed');
+        if (nextCollapsed === wasCollapsed) {
+            updateSidebarToggleA11y();
+            return;
+        }
+
+        if (nextCollapsed) {
+            sidebarLastExpandedWidth = sidebar.getBoundingClientRect().width;
+            stopSidebarResize();
+            sidebar.classList.add('collapsed');
+            if (sidebarResizer) {
+                sidebarResizer.style.visibility = 'hidden';
+            }
+        } else {
+            sidebar.classList.remove('collapsed');
+            if (sidebarResizer) {
+                sidebarResizer.style.visibility = '';
+            }
+            if (restoreWidth && !sidebarMobileMql.matches) {
+                const targetWidth = sidebarLastExpandedWidth || SIDEBAR_MIN_WIDTH;
+                setSidebarWidth(targetWidth);
+            }
+        }
+
+        updateSidebarToggleA11y();
+        syncCanvasSizeForLayout();
+    }
+
+    function initSidebarCollapse() {
+        if (!sidebar || !sidebarToggle) return;
+
+        sidebarToggle.addEventListener('click', () => {
+            setSidebarCollapsed(!sidebar.classList.contains('collapsed'));
+        });
+
+        // Sidebar is expanded by default on all screen sizes.
+        // When viewport grows from mobile to desktop, restore expanded state automatically.
+        sidebarMobileMql.addEventListener('change', () => {
+            if (!sidebarMobileMql.matches && sidebar.classList.contains('collapsed')) {
+                setSidebarCollapsed(false);
+            }
+        });
+
+        // Initialise aria/title text without changing collapsed state.
+        updateSidebarToggleA11y();
     }
 
     function initSidebarTabs() {
@@ -3073,6 +3138,7 @@
     // ========== 初始化 ==========
     window.addEventListener('load', () => {
         initSidebarResize();
+        initSidebarCollapse();
         initSidebarTabs();
         initCitySelector();
         initLanguageSwitcher();
@@ -3143,6 +3209,9 @@
         
         // 更新 HTML lang 属性
         document.documentElement.lang = i18n.getCurrentLanguage() === 'zh' ? 'zh-CN' : 'en';
+
+        // 更新侧边栏切换按钮提示
+        updateSidebarToggleA11y();
         
         // 更新缩放信息
         updateZoomInfo();

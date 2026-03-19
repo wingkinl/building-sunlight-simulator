@@ -19,12 +19,16 @@
         </svg>
     </a>
 
+    <!-- Import / Export vertical pill, aligned below the GitHub icon -->
+    <div id="sideActions">
+        <button id="btnImportJson" class="secondary" type="button" data-i18n="editor.importJsonButton">导入</button>
+        <button id="btnExport" class="success" type="button" data-i18n="editor.exportButton">导出</button>
+    </div>
+
     <div id="globalToolbar" role="toolbar" aria-label="editor actions">
         <button id="btnUploadPlan" class="btn-outline" type="button" data-i18n="editor.toolbarUpload">上传图纸</button>
         <button id="btnResetView" class="info" type="button" data-i18n="editor.resetView">⟲ 重置视角</button>
         <button id="btnDrawMode" class="secondary" type="button" disabled data-i18n="editor.modeIdle" title="需要先标定比例尺">浏览模式</button>
-        <button id="btnImportJson" class="secondary" type="button" data-i18n="editor.importJsonButton">导入</button>
-        <button id="btnExport" class="success" type="button" data-i18n="editor.exportButton">导出</button>
         <input type="file" id="fileInput" accept="image/*" class="toolbar-hidden-input">
         <input type="file" id="jsonImportInput" accept=".json" class="toolbar-hidden-input">
         <input type="hidden" id="exportFilename" value="buildings_config.json">
@@ -42,6 +46,7 @@
     <div id="sidebar">
         <div class="sidebar-header">
             <h3 data-i18n="editor.pageTitle">🛠️ 楼盘数据配置</h3>
+            <button class="sidebar-toggle" id="sidebarToggle" type="button" title="收起" aria-label="收起侧边栏"></button>
             <div class="lang-switcher">
                 <button class="lang-btn" data-lang="zh">中文</button>
                 <button class="lang-btn" data-lang="en">EN</button>

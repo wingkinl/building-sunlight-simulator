@@ -59,6 +59,7 @@ const i18n = (function() {
                 ownOnly: '只显示本小区',
                 
                 timeLabel: '时间 (06:00 - 18:00)',
+                timeLabelShort: '时间',
                 
                 // 日照分析
                 step4: '4. 日照分析',
@@ -257,6 +258,7 @@ const i18n = (function() {
                 ownOnly: 'Show Only This Community',
                 
                 timeLabel: 'Time (06:00 - 18:00)',
+                timeLabelShort: 'Time',
                 
                 // Sunlight analysis
                 step4: '4. Sunlight Analysis',

@@ -562,6 +562,11 @@
         sidebarResizer.setAttribute('aria-valuemax', String(getSidebarMaxWidth()));
         sidebarResizer.setAttribute('aria-valuenow', String(Math.round(initialWidth)));
 
+        sidebarResizer.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            setSidebarCollapsed(!sidebar.classList.contains('collapsed'));
+        });
+
         sidebarResizer.addEventListener('pointerdown', (e) => {
             if (e.button !== 0) return;
             e.preventDefault();

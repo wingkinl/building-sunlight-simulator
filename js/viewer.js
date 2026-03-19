@@ -483,6 +483,8 @@
         const cutLines = building.cutLines;
         const unitCenters = building.unitCenters;
         const units = Math.max(1, parseInt(building.units || 1, 10));
+        const axis = axisFromAngleDeg(building.unitSplitAngleDeg || 0);
+        const startsFromSideB = isUnitNumberingStartFromSideB(building);
         if (!Array.isArray(shape) || shape.length < 3) return null;
         if (!Array.isArray(cutLines) || cutLines.length === 0) return null;
 
@@ -596,12 +598,16 @@
                 }
             }
         }
-        // Assign unmapped regions by X-coordinate order
-        const ordered = regions.slice().sort((a, b) => a.cx - b.cx);
-        let nextUnit = 0;
+        // Assign unmapped regions by split-axis order so fallback numbering matches the building setting.
+        const ordered = regions.slice().sort((a, b) => dot2(b, axis) - dot2(a, axis));
+        let nextPhysicalUnit = 0;
         for (const r of ordered) {
             if (!regionToUnit.has(r.id)) {
-                regionToUnit.set(r.id, Math.min(units - 1, nextUnit++));
+                const physicalUnitIndex = Math.min(units - 1, nextPhysicalUnit++);
+                const logicalUnitIndex = startsFromSideB
+                    ? (units - 1 - physicalUnitIndex)
+                    : physicalUnitIndex;
+                regionToUnit.set(r.id, logicalUnitIndex);
             }
         }
 
@@ -638,6 +644,27 @@
     function axisFromAngleDeg(angleDeg) {
         const rad = clampAngleDeg(angleDeg) * Math.PI / 180;
         return { x: Math.cos(rad), y: Math.sin(rad) };
+    }
+
+    function getUnitNumberingStartSide(building) {
+        if (building?.unitNumberingStartSide === 'A' || building?.unitNumberingStartSide === 'B') {
+            return building.unitNumberingStartSide;
+        }
+        // Backward compatibility with previous field name.
+        if (typeof building?.unitNumberingWestToEast === 'boolean') {
+            return building.unitNumberingWestToEast ? 'B' : 'A';
+        }
+        return 'A';
+    }
+
+    function isUnitNumberingStartFromSideB(building) {
+        return getUnitNumberingStartSide(building) === 'B';
+    }
+
+    function getDisplayUnitNumber(building, physicalUnitIndex, units) {
+        return isUnitNumberingStartFromSideB(building)
+            ? (units - physicalUnitIndex)
+            : (physicalUnitIndex + 1);
     }
 
     function dot2(p, axis) {
@@ -838,7 +865,7 @@
                         buildingIndex,
                         buildingName: building.name || `建筑${buildingIndex + 1}`,
                         floor: floor + 1,
-                        unit: unitIdx + 1, // unit1 对应投影高的一侧（通常是东/南侧）
+                        unit: getDisplayUnitNumber(building, unitIdx, units),
                         x: midX + seg.outward.x * 0.5,
                         y: midY + seg.outward.y * 0.5,
                         z: windowHeight,
@@ -1241,6 +1268,53 @@
         toggleHeatmap(true);
     }
 
+    function getPrecomputedKeyForCurrentSelection(precomputedSunlight) {
+        if (!precomputedSunlight || typeof precomputedSunlight !== 'object') return null;
+
+        const seasonSelect = document.getElementById('seasonSelect');
+        const customDateInput = document.getElementById('customDateInput');
+        const seasonValue = seasonSelect?.value;
+
+        const preMap = { '-23.44': 'winter', '0': 'equinox', '23.44': 'summer' };
+        if (seasonValue && preMap[seasonValue] && precomputedSunlight[preMap[seasonValue]]) {
+            return preMap[seasonValue];
+        }
+
+        if (seasonValue === 'custom') {
+            const dateText = String(customDateInput?.value || '').trim();
+            if (!dateText) return null;
+            const candidates = [dateText, `date:${dateText}`];
+            for (const key of candidates) {
+                if (precomputedSunlight[key]) return key;
+            }
+            if (precomputedSunlight.custom && typeof precomputedSunlight.custom === 'object') {
+                for (const key of candidates) {
+                    if (precomputedSunlight.custom[key]) return `custom.${key}`;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function tryApplyPrecomputedForCurrentSelection(data) {
+        const precomputed = data?.precomputedSunlight;
+        const key = getPrecomputedKeyForCurrentSelection(precomputed);
+        if (!key) return false;
+
+        let result = null;
+        if (key.startsWith('custom.')) {
+            const customKey = key.slice('custom.'.length);
+            result = precomputed?.custom?.[customKey] || null;
+        } else {
+            result = precomputed?.[key] || null;
+        }
+
+        if (!result) return false;
+        applyPrecomputedResults(result);
+        return true;
+    }
+
     async function exportAnalysis() {
         if (!currentData || !currentData.buildings) {
             alert(i18n.t('viewer.errorNoData'));
@@ -1363,10 +1437,7 @@
             loadBuildings(data);
             clearSunlightResults();
             hideImportUI();
-            // Auto-apply pre-computed winter results if available
-            if (data.precomputedSunlight && data.precomputedSunlight.winter) {
-                applyPrecomputedResults(data.precomputedSunlight.winter);
-            }
+            tryApplyPrecomputedForCurrentSelection(data);
             return true;
         } catch (err) {
             console.log('未检测到 data/project.json，使用手动导入模式');
@@ -1490,6 +1561,7 @@
                 currentData = data;
                 loadBuildings(data);
                 clearSunlightResults();
+                tryApplyPrecomputedForCurrentSelection(data);
                 document.getElementById('empty-state').style.display = 'none';
             } catch (err) {
                 alert(i18n.t('viewer.errorParseFailed'));
@@ -2043,15 +2115,9 @@
                 customDeclination = null;
             }
 
-            // In simplified mode, load pre-computed results for standard seasons
-            if (simplifiedMode && currentData && currentData.precomputedSunlight) {
-                const preMap = { '-23.44': 'winter', '0': 'equinox', '23.44': 'summer' };
-                const preKey = preMap[value];
-                if (preKey && currentData.precomputedSunlight[preKey]) {
-                    updateSun();
-                    applyPrecomputedResults(currentData.precomputedSunlight[preKey]);
-                    return;
-                }
+            if (currentData && tryApplyPrecomputedForCurrentSelection(currentData)) {
+                updateSun();
+                return;
             }
 
             updateSun();
@@ -2062,6 +2128,9 @@
         customDateInput.addEventListener('change', (e) => {
             customDeclination = Utils.calculateSolarDeclination(e.target.value);
             updateSun();
+            if (currentData && tryApplyPrecomputedForCurrentSelection(currentData)) {
+                return;
+            }
             clearSunlightResults();
         });
 

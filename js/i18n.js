@@ -161,6 +161,7 @@ const i18n = (function() {
                 defaultFloorHeight: '默认层高(米)',
                 defaultUnits: '默认户数/层',
                 defaultIsOwn: '默认标记为本小区',
+                defaultUnitNumberingStartFromSideB: '默认户号从B侧开始',
                 useDefaults: '新楼栋使用默认值',
                 applyToAll: '应用到所有楼栋',
                 
@@ -221,6 +222,7 @@ const i18n = (function() {
                 splitRatio: '比例(%)',
                 splitArea: '面积(㎡)',
                 splitUseAreas: '按面积输入并实时换算',
+                splitNumberingStartFromSideB: '户号从B侧开始',
                 splitAreasTitle: '面积输入'
             }
         },
@@ -370,6 +372,7 @@ const i18n = (function() {
                 defaultFloorHeight: 'Default Floor Height (m)',
                 defaultUnits: 'Default Units/Floor',
                 defaultIsOwn: 'Mark as This Community by Default',
+                defaultUnitNumberingStartFromSideB: 'Default numbering starts from Side B',
                 useDefaults: 'Use Defaults for New Buildings',
                 applyToAll: 'Apply to All Buildings',
                 
@@ -430,6 +433,7 @@ const i18n = (function() {
                 splitRatio: 'Ratio (%)',
                 splitArea: 'Area (㎡)',
                 splitUseAreas: 'Use Areas and Update Live',
+                splitNumberingStartFromSideB: 'Numbering starts from Side B',
                 splitAreasTitle: 'Areas'
             }
         }

@@ -26,6 +26,7 @@ const CONFIG = (function() {
             FLOOR_HEIGHT: 3,           // 默认层高（米）
             UNITS_PER_FLOOR: 2,        // 默认每层户数
             IS_THIS_COMMUNITY: true,   // 默认标记为本小区
+            UNIT_NUMBERING_START_SIDE: 'A', // 默认户号起始侧（A 或 B）
             SCALE_DISTANCE: 50,        // 默认比例尺距离（米）
             TIME_HOUR: 10,             // 默认时间（小时）
             SEASON: -23.44             // 默认季节（冬至）

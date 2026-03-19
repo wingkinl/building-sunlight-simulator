@@ -38,6 +38,7 @@
     const splitPreviewCanvas = document.getElementById('splitPreviewCanvas');
     const splitFloorsInput = document.getElementById('splitFloorsInput');
     const splitUseAreasChk = document.getElementById('splitUseAreasChk');
+    const splitNumberingStartFromSideBChk = document.getElementById('splitNumberingStartFromSideBChk');
     const splitAreaTh = document.getElementById('splitAreaTh');
     const splitUnitIndexInput = document.getElementById('splitUnitIndexInput');
     const splitModeSelect = document.getElementById('splitModeSelect');
@@ -58,6 +59,7 @@
     const defFloorHeightEl = document.getElementById('defFloorHeight');
     const defUnitsEl = document.getElementById('defUnits');
     const defIsThisCommunityEl = document.getElementById('defIsThisCommunity');
+    const defUnitNumberingStartFromSideBEl = document.getElementById('defUnitNumberingStartFromSideB');
     const btnApplyDefaultsAll = document.getElementById('btnApplyDefaultsAll');
     const chkUseDefaults = document.getElementById('chkUseDefaults');
     const sidebarTabButtons = document.querySelectorAll('.sidebar-tab-btn');
@@ -104,6 +106,7 @@
         angleDeg: 0,
         barDom: { segs: [], handles: [] },
         useAreas: false,
+        numberingStartSide: 'A',
         draftRatiosPerFloor: [],
         draftAreasPerFloor: [],
         preview: null,
@@ -140,6 +143,16 @@
         return normalizeRatios(ratios).slice(0, count);
     }
 
+    function normalizeAreasForUnits(areas, units) {
+        const count = Math.max(1, parseInt(units || 1, 10));
+        if (!Array.isArray(areas) || areas.length !== count) return null;
+        return areas.map(value => {
+            const area = Number(value);
+            if (!isFinite(area) || area <= 0) return null;
+            return Utils.roundTo(area, 2);
+        });
+    }
+
     function formatDefaultBuildingName(index) {
         const n = Math.max(1, parseInt(index || 1, 10));
         const template = i18n.t('viewer.defaultBuildingName');
@@ -168,6 +181,42 @@
             if (Math.abs((Number(a[i]) || 0) - (Number(b[i]) || 0)) > eps) return false;
         }
         return true;
+    }
+
+    function areasMatch(a, b, eps = 1e-6) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            const av = a[i] == null ? null : Number(a[i]);
+            const bv = b[i] == null ? null : Number(b[i]);
+            if (av == null && bv == null) continue;
+            if (av == null || bv == null) return false;
+            if (Math.abs(av - bv) > eps) return false;
+        }
+        return true;
+    }
+
+    function hasPerFloorRatioOverrides(unitRatiosPerFloor, floors, units) {
+        const totalFloors = Math.max(1, parseInt(floors || 1, 10));
+        const first = normalizeRatiosForUnits(unitRatiosPerFloor?.[0], units);
+        if (!first) return false;
+        for (let i = 1; i < totalFloors; i++) {
+            const normalized = normalizeRatiosForUnits(unitRatiosPerFloor?.[i], units);
+            if (!normalized) continue;
+            if (!ratiosMatch(normalized, first)) return true;
+        }
+        return false;
+    }
+
+    function hasPerFloorAreaOverrides(unitAreasPerFloor, floors, units) {
+        const totalFloors = Math.max(1, parseInt(floors || 1, 10));
+        const first = normalizeAreasForUnits(unitAreasPerFloor?.[0], units);
+        if (!first) return false;
+        for (let i = 1; i < totalFloors; i++) {
+            const normalized = normalizeAreasForUnits(unitAreasPerFloor?.[i], units);
+            if (!normalized) continue;
+            if (!areasMatch(normalized, first)) return true;
+        }
+        return false;
     }
 
     function getSharedFirstFloorRatios(unitRatiosPerFloor, floors, units) {
@@ -209,6 +258,75 @@
         const sharedFirst = getSharedFirstFloorRatios(perFloor, floors, units);
         if (sharedFirst) return [sharedFirst.slice()];
         return perFloor;
+    }
+
+    function getFloorAreas(unitAreasPerFloor, floorIndex, floors, units) {
+        const direct = normalizeAreasForUnits(unitAreasPerFloor?.[floorIndex], units);
+        if (direct) return direct;
+        if (floorIndex > 0 && Array.isArray(unitAreasPerFloor) && unitAreasPerFloor.length === 1) {
+            const sharedFirst = normalizeAreasForUnits(unitAreasPerFloor[0], units);
+            if (sharedFirst) return sharedFirst.slice();
+        }
+        return null;
+    }
+
+    function serializeSplitAreasPerFloor(unitAreasPerFloor, floors, units) {
+        const perFloor = [];
+        let hasAny = false;
+        for (let fi = 0; fi < floors; fi++) {
+            const normalized = normalizeAreasForUnits(unitAreasPerFloor?.[fi], units);
+            if (normalized && normalized.some(value => value != null)) hasAny = true;
+            perFloor.push(normalized);
+        }
+        if (!hasAny) return null;
+
+        const first = perFloor[0] || perFloor.find(Array.isArray);
+        if (!first) return null;
+
+        let hasOverrides = false;
+        for (let fi = 1; fi < floors; fi++) {
+            const next = perFloor[fi];
+            if (!next) continue;
+            if (!areasMatch(next, first)) {
+                hasOverrides = true;
+                break;
+            }
+        }
+
+        if (!hasOverrides) return [first.slice()];
+        if (!perFloor[0]) perFloor[0] = first.slice();
+        return perFloor;
+    }
+
+    function normalizeNumberingStartSide(value) {
+        return (value === 'B') ? 'B' : 'A';
+    }
+
+    function isStartFromSideB(value = splitState.numberingStartSide) {
+        return normalizeNumberingStartSide(value) === 'B';
+    }
+
+    function getBuildingNumberingStartSide(building, fallback = CONFIG.DEFAULTS.UNIT_NUMBERING_START_SIDE) {
+        if (building?.unitNumberingStartSide === 'A' || building?.unitNumberingStartSide === 'B') {
+            return building.unitNumberingStartSide;
+        }
+        // Backward compatibility with old persisted boolean.
+        if (typeof building?.unitNumberingWestToEast === 'boolean') {
+            return building.unitNumberingWestToEast ? 'B' : 'A';
+        }
+        return normalizeNumberingStartSide(fallback);
+    }
+
+    function getPhysicalSplitIndexForDisplayIndex(displayIndex, units, numberingStartSide = splitState.numberingStartSide) {
+        const count = Math.max(1, parseInt(units || 1, 10));
+        const idx = Math.max(0, Math.min(count - 1, parseInt(displayIndex || 0, 10)));
+        return isStartFromSideB(numberingStartSide) ? (count - 1 - idx) : idx;
+    }
+
+    function getDisplayUnitNumberForPhysicalIndex(physicalIndex, units, numberingStartSide = splitState.numberingStartSide) {
+        const count = Math.max(1, parseInt(units || 1, 10));
+        const idx = Math.max(0, Math.min(count - 1, parseInt(physicalIndex || 0, 10)));
+        return isStartFromSideB(numberingStartSide) ? (count - idx) : (idx + 1);
     }
 
     function clampHandlePos(pos, left, right) {
@@ -1209,6 +1327,9 @@
             floorHeight: useDefaults ? clampFloat(parseFloat(defFloorHeightEl.value), validation.FLOOR_HEIGHT.MIN, validation.FLOOR_HEIGHT.MAX, CONFIG.DEFAULTS.FLOOR_HEIGHT) : CONFIG.DEFAULTS.FLOOR_HEIGHT,
             units: useDefaults ? clampInt(parseInt(defUnitsEl.value), validation.UNITS.MIN, validation.UNITS.MAX, CONFIG.DEFAULTS.UNITS_PER_FLOOR) : CONFIG.DEFAULTS.UNITS_PER_FLOOR,
             isThisCommunity: useDefaults ? !!defIsThisCommunityEl.checked : CONFIG.DEFAULTS.IS_THIS_COMMUNITY,
+            unitNumberingStartSide: useDefaults
+                ? (defUnitNumberingStartFromSideBEl?.checked ? 'B' : 'A')
+                : normalizeNumberingStartSide(CONFIG.DEFAULTS.UNIT_NUMBERING_START_SIDE),
             points: cleaned
         };
         buildings.push(b);
@@ -1564,7 +1685,15 @@
         const h = clampFloat(parseFloat(defFloorHeightEl.value), validation.FLOOR_HEIGHT.MIN, validation.FLOOR_HEIGHT.MAX, CONFIG.DEFAULTS.FLOOR_HEIGHT);
         const u = clampInt(parseInt(defUnitsEl.value), validation.UNITS.MIN, validation.UNITS.MAX, CONFIG.DEFAULTS.UNITS_PER_FLOOR);
         const own = !!defIsThisCommunityEl.checked;
-        buildings = buildings.map(b => ({ ...b, floors: f, floorHeight: h, units: u, isThisCommunity: own }));
+        const numberingStartSide = defUnitNumberingStartFromSideBEl?.checked ? 'B' : 'A';
+        buildings = buildings.map(b => ({
+            ...b,
+            floors: f,
+            floorHeight: h,
+            units: u,
+            isThisCommunity: own,
+            unitNumberingStartSide: numberingStartSide
+        }));
         renderTable();
         draw();
     });
@@ -1612,6 +1741,13 @@
             city,
             scaleRatio: scaleRatio,
             origin: { x: centerX, y: centerY },
+            defaults: {
+                floors: clampInt(parseInt(defFloorsEl?.value), CONFIG.VALIDATION.FLOORS.MIN, CONFIG.VALIDATION.FLOORS.MAX, CONFIG.DEFAULTS.FLOORS),
+                floorHeight: clampFloat(parseFloat(defFloorHeightEl?.value), CONFIG.VALIDATION.FLOOR_HEIGHT.MIN, CONFIG.VALIDATION.FLOOR_HEIGHT.MAX, CONFIG.DEFAULTS.FLOOR_HEIGHT),
+                units: clampInt(parseInt(defUnitsEl?.value), CONFIG.VALIDATION.UNITS.MIN, CONFIG.VALIDATION.UNITS.MAX, CONFIG.DEFAULTS.UNITS_PER_FLOOR),
+                isThisCommunity: !!defIsThisCommunityEl?.checked,
+                unitNumberingStartSide: defUnitNumberingStartFromSideBEl?.checked ? 'B' : 'A'
+            },
             buildings: buildings.map(b => {
                 const c = getPolygonCenter(b.points);
                 const cx = (c.x - centerX) * scaleRatio;
@@ -1629,6 +1765,13 @@
                     }
                 }
 
+                let unitAreasPerFloor = null;
+                if (b.unitSplitUseAreas && Array.isArray(b.unitAreasPerFloor) && b.unitAreasPerFloor.length > 0) {
+                    const floors = Math.max(1, parseInt(b.floors || 1, 10));
+                    const units = Math.max(1, parseInt(b.units || 1, 10));
+                    unitAreasPerFloor = serializeSplitAreasPerFloor(b.unitAreasPerFloor, floors, units);
+                }
+
                 return {
                     name: b.name,
                     floors: b.floors,
@@ -1642,7 +1785,10 @@
                     })),
                     center: { x: round2(cx), y: round2(cy) },
                     unitRatiosPerFloor,
+                    unitAreasPerFloor,
+                    unitSplitUseAreas: !!b.unitSplitUseAreas,
                     unitSplitAngleDeg: (typeof b.unitSplitAngleDeg === 'number' && isFinite(b.unitSplitAngleDeg)) ? clampAngleDeg(b.unitSplitAngleDeg) : undefined,
+                    unitNumberingStartSide: getBuildingNumberingStartSide(b),
                     advancedSplit: !!b.advancedSplit,
                     // Transform cutLines/unitCenters from editor-pixel to world coords (same as shape)
                     cutLines: Array.isArray(b.cutLines) ? b.cutLines.map(line =>
@@ -1720,7 +1866,10 @@
                 isThisCommunity: own,
                 points: cleaned,
                 unitRatiosPerFloor: Array.isArray(b?.unitRatiosPerFloor) ? b.unitRatiosPerFloor : null,
+                unitAreasPerFloor: Array.isArray(b?.unitAreasPerFloor) ? b.unitAreasPerFloor : null,
+                unitSplitUseAreas: !!b?.unitSplitUseAreas,
                 unitSplitAngleDeg: (typeof b?.unitSplitAngleDeg === 'number' && isFinite(b.unitSplitAngleDeg)) ? clampAngleDeg(b.unitSplitAngleDeg) : undefined,
+                unitNumberingStartSide: getBuildingNumberingStartSide(b),
                 advancedSplit: !!b?.advancedSplit,
                 // Inverse-transform cutLines/unitCenters from world coords back to editor-pixel
                 cutLines: Array.isArray(b?.cutLines) ? b.cutLines.map(line =>
@@ -1738,6 +1887,21 @@
         }
 
         scaleRatio = sr;
+        const defaults = data?.defaults;
+        if (defaults && typeof defaults === 'object') {
+            defFloorsEl.value = clampInt(parseInt(defaults.floors), CONFIG.VALIDATION.FLOORS.MIN, CONFIG.VALIDATION.FLOORS.MAX, CONFIG.DEFAULTS.FLOORS);
+            defFloorHeightEl.value = clampFloat(parseFloat(defaults.floorHeight), CONFIG.VALIDATION.FLOOR_HEIGHT.MIN, CONFIG.VALIDATION.FLOOR_HEIGHT.MAX, CONFIG.DEFAULTS.FLOOR_HEIGHT);
+            defUnitsEl.value = clampInt(parseInt(defaults.units), CONFIG.VALIDATION.UNITS.MIN, CONFIG.VALIDATION.UNITS.MAX, CONFIG.DEFAULTS.UNITS_PER_FLOOR);
+            defIsThisCommunityEl.checked = (typeof defaults.isThisCommunity === 'boolean') ? defaults.isThisCommunity : CONFIG.DEFAULTS.IS_THIS_COMMUNITY;
+            if (defUnitNumberingStartFromSideBEl) {
+                const defaultStartSide = normalizeNumberingStartSide(
+                    defaults.unitNumberingStartSide
+                    ?? (typeof defaults.unitNumberingWestToEast === 'boolean' ? (defaults.unitNumberingWestToEast ? 'B' : 'A') : null)
+                    ?? CONFIG.DEFAULTS.UNIT_NUMBERING_START_SIDE
+                );
+                defUnitNumberingStartFromSideBEl.checked = defaultStartSide === 'B';
+            }
+        }
         const importedLat = Number(data?.latitude);
         if (isFinite(importedLat)) {
             projectLatEl.value = importedLat;
@@ -1787,10 +1951,29 @@
         const floors = Math.max(1, parseInt(b.floors || 1, 10));
         const units = Math.max(1, parseInt(b.units || 1, 10));
 
-        splitState.draftRatiosPerFloor = new Array(floors).fill(null).map((_, i) => {
-            return getFloorRatios(b.unitRatiosPerFloor, i, floors, units);
-        });
-        splitState.draftAreasPerFloor = new Array(floors).fill(null);
+        const hasRatioOverrides = hasPerFloorRatioOverrides(b.unitRatiosPerFloor, floors, units);
+        if (hasRatioOverrides) {
+            splitState.draftRatiosPerFloor = new Array(floors).fill(null).map((_, i) => {
+                return getFloorRatios(b.unitRatiosPerFloor, i, floors, units);
+            });
+        } else {
+            const firstRatios = getFloorRatios(b.unitRatiosPerFloor, 0, floors, units) || buildEqualRatios(units);
+            splitState.draftRatiosPerFloor = new Array(floors).fill(null);
+            splitState.draftRatiosPerFloor[0] = normalizeRatios(firstRatios).slice(0, units);
+        }
+
+        const hasAreaOverrides = hasPerFloorAreaOverrides(b.unitAreasPerFloor, floors, units);
+        if (hasAreaOverrides) {
+            splitState.draftAreasPerFloor = new Array(floors).fill(null).map((_, i) => {
+                return getFloorAreas(b.unitAreasPerFloor, i, floors, units);
+            });
+        } else {
+            splitState.draftAreasPerFloor = new Array(floors).fill(null);
+            const firstAreas = getFloorAreas(b.unitAreasPerFloor, 0, floors, units);
+            if (Array.isArray(firstAreas) && firstAreas.length === units) {
+                splitState.draftAreasPerFloor[0] = firstAreas.slice();
+            }
+        }
 
         rebuildFloorSelect(floors);
 
@@ -1806,7 +1989,10 @@
         splitState.unitCenters = deepClone(Array.isArray(b.unitCenters) ? b.unitCenters : []);
         splitState.draftLine = [];
         splitState.lineCursor = null;
-        splitState.areas = new Array(units).fill('');
+        const a0 = splitState.draftAreasPerFloor[0];
+        splitState.areas = Array.isArray(a0) && a0.length === units
+            ? a0.map(value => value == null ? '' : String(value))
+            : new Array(units).fill('');
         splitFloorSelect.value = '0';
 
         const r0 = splitState.draftRatiosPerFloor[0];
@@ -1814,8 +2000,10 @@
         splitState.angleDeg = (typeof b.unitSplitAngleDeg === 'number' && isFinite(b.unitSplitAngleDeg)) ? clampAngleDeg(b.unitSplitAngleDeg) : 0;
         splitAngleInput.value = String(splitState.angleDeg);
         splitAngleSlider.value = String(splitState.angleDeg);
-        splitState.useAreas = false;
-        splitUseAreasChk.checked = false;
+        splitState.useAreas = !!b.unitSplitUseAreas;
+        splitState.numberingStartSide = getBuildingNumberingStartSide(b);
+        splitUseAreasChk.checked = splitState.useAreas;
+        if (splitNumberingStartFromSideBChk) splitNumberingStartFromSideBChk.checked = splitState.numberingStartSide === 'B';
         splitState.preview = null;
         splitState.hoverBoundaryIndex = -1;
         splitState.draggingBoundary = null;
@@ -1895,6 +2083,7 @@
         splitState.angleDeg = 0;
         splitState.barDom = { segs: [], handles: [] };
         splitState.useAreas = false;
+        splitState.numberingStartSide = 'A';
         splitState.draftRatiosPerFloor = [];
         splitState.draftAreasPerFloor = [];
         applySplitModeUI();
@@ -2001,7 +2190,8 @@
                 const a = Math.max(0, parseFloat(splitState.areas?.[i]) || 0);
                 if (a > 0) areaHtml = `<div class="seg-area">${Utils.roundTo(a, 2)}㎡</div>`;
             }
-            seg.innerHTML = `<div class="seg-idx">${i + 1}</div><div class="seg-pct">${pct}%</div>${areaHtml}`;
+            const displayUnit = getDisplayUnitNumberForPhysicalIndex(i, n);
+            seg.innerHTML = `<div class="seg-idx">${displayUnit}</div><div class="seg-pct">${pct}%</div>${areaHtml}`;
             cum += ratios[i];
         }
 
@@ -2018,33 +2208,33 @@
     function renderSplitTable() {
         const units = currentSplitUnits();
         ensureSplitArraySizes(units);
-        const ratios = splitState.ratios;
         splitTableBody.innerHTML = '';
         if (splitAreaTh) splitAreaTh.style.display = splitState.useAreas ? '' : 'none';
 
-        for (let i = 0; i < units; i++) {
+        for (let displayIndex = 0; displayIndex < units; displayIndex++) {
+            const physicalIndex = getPhysicalSplitIndexForDisplayIndex(displayIndex, units);
             const tr = document.createElement('tr');
 
             const tdIdx = document.createElement('td');
-            tdIdx.textContent = String(i + 1);
+            tdIdx.textContent = String(displayIndex + 1);
 
             const tdRatio = document.createElement('td');
             const inpRatio = document.createElement('input');
             inpRatio.type = 'number';
-            inpRatio.id = `splitRatioInput_${i + 1}`;
-            inpRatio.name = `splitRatioInput_${i + 1}`;
+            inpRatio.id = `splitRatioInput_${displayIndex + 1}`;
+            inpRatio.name = `splitRatioInput_${displayIndex + 1}`;
             inpRatio.min = '0';
             inpRatio.step = '0.1';
-            inpRatio.value = Utils.roundTo(ratios[i] * 100, 2);
+            inpRatio.value = Utils.roundTo((splitState.ratios[physicalIndex] || 0) * 100, 2);
             inpRatio.disabled = !!splitState.useAreas;
             inpRatio.addEventListener('change', () => {
                 if (splitState.useAreas) return;
                 const pct = Math.max(0, parseFloat(inpRatio.value) || 0);
                 const target = pct / 100;
-                const next = ratios.slice();
-                next[i] = target;
+                const next = splitState.ratios.slice();
+                next[physicalIndex] = target;
                 const restIdx = [];
-                for (let k = 0; k < next.length; k++) if (k !== i) restIdx.push(k);
+                for (let k = 0; k < next.length; k++) if (k !== physicalIndex) restIdx.push(k);
                 const restSum = restIdx.reduce((s, k) => s + Math.max(0, next[k] || 0), 0);
                 const remaining = Math.max(0, 1 - Math.max(0, target));
                 if (restIdx.length > 0) {
@@ -2064,13 +2254,13 @@
                 tdArea = document.createElement('td');
                 const inpArea = document.createElement('input');
                 inpArea.type = 'number';
-                inpArea.id = `splitAreaInput_${i + 1}`;
-                inpArea.name = `splitAreaInput_${i + 1}`;
+                inpArea.id = `splitAreaInput_${displayIndex + 1}`;
+                inpArea.name = `splitAreaInput_${displayIndex + 1}`;
                 inpArea.min = '0';
                 inpArea.step = '0.01';
-                inpArea.value = splitState.areas[i] ?? '';
+                inpArea.value = splitState.areas[physicalIndex] ?? '';
                 inpArea.addEventListener('input', () => {
-                    splitState.areas[i] = inpArea.value;
+                    splitState.areas[physicalIndex] = inpArea.value;
                     updateRatiosFromAreas();
                 });
                 tdArea.appendChild(inpArea);
@@ -2083,6 +2273,16 @@
         }
     }
 
+    function updateSplitTableRatioInputs() {
+        const units = currentSplitUnits();
+        for (let displayIndex = 0; displayIndex < units; displayIndex++) {
+            const input = document.getElementById(`splitRatioInput_${displayIndex + 1}`);
+            if (!input) continue;
+            const physicalIndex = getPhysicalSplitIndexForDisplayIndex(displayIndex, units);
+            input.value = String(Utils.roundTo((splitState.ratios[physicalIndex] || 0) * 100, 2));
+        }
+    }
+
     function updateRatiosFromAreas() {
         if (!splitState.useAreas) return;
         const vals = splitState.areas.map(v => Math.max(0, parseFloat(v) || 0));
@@ -2090,7 +2290,7 @@
         if (!(sum > 1e-9)) return;
         splitState.ratios = vals.map(v => v / sum);
         updateSplitBarStyles();
-        renderSplitTable();
+        updateSplitTableRatioInputs();
         renderSplitPreview();
     }
 
@@ -2541,6 +2741,33 @@
         }
         g.restore();
 
+        // Side A/B markers are bound to the current split axis, so they remain correct even if building is rotated.
+        const sideAWorld = { x: center.x + u.x * (maxP - centerProj), y: center.y + u.y * (maxP - centerProj) };
+        const sideBWorld = { x: center.x + u.x * (minP - centerProj), y: center.y + u.y * (minP - centerProj) };
+        const sideACanvas = toCanvas(sideAWorld);
+        const sideBCanvas = toCanvas(sideBWorld);
+
+        const drawSideMarker = (marker, label, active) => {
+            g.save();
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.font = `bold ${Math.max(11, Math.round(12 * dpr))}px Arial`;
+            g.fillStyle = active ? 'rgba(46, 204, 113, 0.95)' : 'rgba(52, 73, 94, 0.85)';
+            g.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+            g.lineWidth = 2 * dpr;
+            g.beginPath();
+            g.arc(marker.x, marker.y, 10 * dpr, 0, Math.PI * 2);
+            g.fill();
+            g.stroke();
+            g.fillStyle = '#ffffff';
+            g.fillText(label, marker.x, marker.y);
+            g.restore();
+        };
+
+        const startsFromSideB = isStartFromSideB();
+        drawSideMarker(sideACanvas, 'A', !startsFromSideB);
+        drawSideMarker(sideBCanvas, 'B', startsFromSideB);
+
         splitState.preview = { dpr, rect, minX, minY, scale, ox, oy, fromCanvas, toCanvas, u, v, minP, maxP, spanP, boundaries };
 
         const dotV = (p) => p.x * v.x + p.y * v.y;
@@ -2606,7 +2833,7 @@
                 const mid = { x: (pA.x + pB.x) / 2, y: (pA.y + pB.y) / 2 };
                 const m = toCanvas(mid);
                 const pct = Utils.roundTo(r * 100, 1);
-                const unitText = `${i + 1}`;
+                const unitText = `${getDisplayUnitNumberForPhysicalIndex(i, splitState.ratios.length)}`;
                 const areaVal = splitState.useAreas ? Math.max(0, parseFloat(splitState.areas?.[i]) || 0) : 0;
                 const restInside = (splitState.useAreas && areaVal > 0) ? `${pct}%, ${Utils.roundTo(areaVal, 2)}㎡` : `${pct}%`;
                 const restText = `(${restInside})`;
@@ -3111,6 +3338,13 @@
         updateRatiosFromAreas();
     });
 
+    if (splitNumberingStartFromSideBChk) {
+        splitNumberingStartFromSideBChk.addEventListener('change', () => {
+            splitState.numberingStartSide = splitNumberingStartFromSideBChk.checked ? 'B' : 'A';
+            renderSplitUI();
+        });
+    }
+
     splitSaveBtn.addEventListener('click', () => {
         const b = buildings[splitState.buildingIndex];
         if (!b) return;
@@ -3118,7 +3352,10 @@
         const units = Math.max(1, parseInt(b.units || 1, 10));
         storeCurrentSplitDraft();
         b.unitRatiosPerFloor = serializeSplitRatiosPerFloor(splitState.draftRatiosPerFloor, floors, units);
+        b.unitAreasPerFloor = splitState.useAreas ? serializeSplitAreasPerFloor(splitState.draftAreasPerFloor, floors, units) : null;
+        b.unitSplitUseAreas = !!splitState.useAreas;
         b.unitSplitAngleDeg = clampAngleDeg(splitState.angleDeg);
+        b.unitNumberingStartSide = normalizeNumberingStartSide(splitState.numberingStartSide);
         if (splitState.mode === 'advanced') {
             commitDraftLine();
             b.advancedSplit = true;
@@ -3139,6 +3376,10 @@
             defUnitsEl.value = clampInt(parseInt(defUnitsEl.value), validation.UNITS.MIN, validation.UNITS.MAX, CONFIG.DEFAULTS.UNITS_PER_FLOOR);
         });
     });
+
+    if (defUnitNumberingStartFromSideBEl) {
+        defUnitNumberingStartFromSideBEl.checked = normalizeNumberingStartSide(CONFIG.DEFAULTS.UNIT_NUMBERING_START_SIDE) === 'B';
+    }
 
     // ========== 初始化 ==========
     window.addEventListener('load', () => {

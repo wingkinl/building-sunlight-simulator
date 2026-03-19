@@ -29,7 +29,7 @@
   注：在线演示仅展示默认数据，如需自定义规划图请参考下文“本地使用”。
 </p>
 
-<img src="examples/vis.png" alt="效果预览" width="80%">
+<img src="examples/vis.jpeg" alt="效果预览" width="80%">
 
 </div>
 

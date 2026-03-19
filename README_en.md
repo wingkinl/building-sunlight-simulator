@@ -29,7 +29,7 @@
   Note: The live demo shows default sample data. To use your own floor plans, please refer to the "Local Usage" section below.
 </p>
 
-<img src="examples/vis.png" alt="Visualization Preview" width="80%">
+<img src="examples/vis.jpeg" alt="Visualization Preview" width="80%">
 
 </div>
 

@@ -103,6 +103,14 @@ const i18n = (function() {
                 calculatingProgress: '计算中... {0}%',
                 calculationComplete: '计算完成！',
 
+                // 导出分析
+                exportAnalysisButton: '💾 导出含日照分析数据',
+                exportAnalysisProgress: '正在计算 {0}...',
+                exportAnalysisComplete: '导出完成！',
+                exportAnalysisWinter: '冬至',
+                exportAnalysisEquinox: '春/秋分',
+                exportAnalysisSummer: '夏至',
+
                 // 城市选择器
                 selectCityPlaceholder: '-- 选择城市 --',
 
@@ -303,6 +311,14 @@ const i18n = (function() {
                 // Calculation progress
                 calculatingProgress: 'Calculating... {0}%',
                 calculationComplete: 'Calculation complete!',
+
+                // Export analysis
+                exportAnalysisButton: '💾 Export with Sunlight Analysis',
+                exportAnalysisProgress: 'Calculating {0}...',
+                exportAnalysisComplete: 'Export complete!',
+                exportAnalysisWinter: 'Winter Solstice',
+                exportAnalysisEquinox: 'Spring/Autumn Equinox',
+                exportAnalysisSummer: 'Summer Solstice',
 
                 // City selector
                 selectCityPlaceholder: '-- Select City --',

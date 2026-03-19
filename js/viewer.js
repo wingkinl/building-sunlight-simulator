@@ -204,6 +204,7 @@
     let currentData = null;
     let sunlightResults = null; // 存储日照计算结果
     let showHeatmap = false;
+    let simplifiedMode = false; // true when data/project.json was auto-loaded
     let customDeclination = null; // 存储自定义日期的赤纬角
     let hoverOccluderMeshes = [];
 
@@ -932,19 +933,23 @@
     /**
      * 执行日照时长计算
      */
-    async function calculateSunlightDuration(progressCallback) {
+    async function calculateSunlightDuration(progressCallback, declinationOverride) {
         if (!currentData || !currentData.buildings) {
             alert(i18n.t('viewer.errorNoData'));
             return null;
         }
 
-        const seasonValue = document.getElementById('seasonSelect').value;
         let declination;
-        if (seasonValue === 'custom') {
-            declination = customDeclination || 0;
+        if (declinationOverride !== undefined) {
+            declination = declinationOverride;
         } else {
-            declination = parseFloat(seasonValue);
-            if (isNaN(declination)) declination = 0;
+            const seasonValue = document.getElementById('seasonSelect').value;
+            if (seasonValue === 'custom') {
+                declination = customDeclination || 0;
+            } else {
+                declination = parseFloat(seasonValue);
+                if (isNaN(declination)) declination = 0;
+            }
         }
 
         const timeStep = CONFIG.SUNLIGHT_ANALYSIS.TIME_INTERVAL; // 固定6分钟间隔
@@ -1223,6 +1228,149 @@
             resetHeatmapHoverState();
         } else {
             resetHeatmapHoverState();
+        }
+    }
+
+    function applyPrecomputedResults(results) {
+        if (!results) return;
+        sunlightResults = results;
+        document.getElementById('toggleHeatmap').disabled = false;
+        document.getElementById('heatmapLegend').style.display = 'block';
+        document.getElementById('toggleHeatmap').checked = true;
+        showSunlightStats(results);
+        toggleHeatmap(true);
+    }
+
+    async function exportAnalysis() {
+        if (!currentData || !currentData.buildings) {
+            alert(i18n.t('viewer.errorNoData'));
+            return;
+        }
+
+        const btn = document.getElementById('exportAnalysisBtn');
+        const calcProgress = document.getElementById('calcProgress');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        btn.disabled = true;
+        calcProgress.style.display = 'block';
+
+        const seasons = [
+            { key: 'winter',  dec: -23.44, label: i18n.t('viewer.exportAnalysisWinter') },
+            { key: 'equinox', dec: 0,      label: i18n.t('viewer.exportAnalysisEquinox') },
+            { key: 'summer',  dec: 23.44,  label: i18n.t('viewer.exportAnalysisSummer') }
+        ];
+
+        const precomputed = {};
+        try {
+            for (let i = 0; i < seasons.length; i++) {
+                const { key, dec, label } = seasons[i];
+                progressText.textContent = i18n.t('viewer.exportAnalysisProgress').replace('{0}', label);
+                const result = await calculateSunlightDuration((p) => {
+                    const overall = (i + p) / seasons.length;
+                    progressFill.style.width = Math.round(overall * 100) + '%';
+                }, dec);
+                if (!result) throw new Error('Calculation failed for ' + key);
+                precomputed[key] = result;
+            }
+
+            const exportData = Object.assign({}, currentData, { precomputedSunlight: precomputed });
+            const json = JSON.stringify(exportData, null, 2);
+            const filename = (currentData.projectName || 'project') + '_with_analysis.json';
+            Utils.downloadFile(json, filename, 'application/json');
+            progressText.textContent = i18n.t('viewer.exportAnalysisComplete');
+        } catch (err) {
+            console.error('Export analysis error:', err);
+            alert(i18n.t('viewer.errorCalcFailed'));
+        }
+
+        btn.disabled = false;
+        setTimeout(() => { calcProgress.style.display = 'none'; }, 1500);
+    }
+
+    function renumberSimplifiedSteps() {
+        const step3el = document.querySelector('[data-i18n="viewer.step3"]');
+        const step4el = document.querySelector('[data-i18n="viewer.step4"]');
+        if (step3el) step3el.textContent = step3el.textContent.replace(/^\d+\./, '1.');
+        if (step4el) step4el.textContent = step4el.textContent.replace(/^\d+\./, '2.');
+    }
+
+    function hideImportUI() {
+        simplifiedMode = true;
+        const githubLink = document.querySelector('.github-link');
+        const dropOverlayEl = document.getElementById('dropOverlay');
+        const importGroup = document.querySelector('.file-upload')?.closest('.control-group');
+        const locationGroup = document.querySelector('.location-config')?.closest('.control-group');
+        const emptyState = document.getElementById('empty-state');
+
+        if (githubLink) githubLink.style.display = 'none';
+        if (dropOverlayEl) {
+            dropOverlayEl.style.display = 'none';
+            dropOverlayEl.classList.remove('is-active');
+            dropOverlayEl.setAttribute('aria-hidden', 'true');
+        }
+        if (importGroup) importGroup.style.display = 'none';
+        if (locationGroup) locationGroup.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'none';
+        const exportBtn = document.getElementById('exportAnalysisBtn');
+        if (exportBtn) exportBtn.style.display = 'none';
+        const compass = document.getElementById('uiCompass');
+        if (compass) compass.style.top = '16px';
+        renumberSimplifiedSteps();
+    }
+
+    function showImportUI() {
+        simplifiedMode = false;
+        const githubLink = document.querySelector('.github-link');
+        const dropOverlayEl = document.getElementById('dropOverlay');
+        const importGroup = document.querySelector('.file-upload')?.closest('.control-group');
+        const locationGroup = document.querySelector('.location-config')?.closest('.control-group');
+
+        if (githubLink) githubLink.style.display = '';
+        if (dropOverlayEl) {
+            dropOverlayEl.style.display = '';
+            dropOverlayEl.classList.remove('is-active');
+            dropOverlayEl.setAttribute('aria-hidden', 'true');
+        }
+        if (importGroup) importGroup.style.display = '';
+        if (locationGroup) locationGroup.style.display = '';
+        const exportBtn = document.getElementById('exportAnalysisBtn');
+        if (exportBtn) exportBtn.style.display = '';
+        const compass = document.getElementById('uiCompass');
+        if (compass) compass.style.top = '';
+    }
+
+    async function initAutoDataLoad() {
+        // Browsers block fetch() to local JSON under file://; use a local HTTP server instead.
+        if (window.location.protocol === 'file:') {
+            console.warn('当前为 file:// 打开页面，浏览器会阻止自动读取 data/project.json。请用本地服务器访问 index.html。');
+            return false;
+        }
+
+        try {
+            const response = await fetch('./data/project.json', { cache: 'no-store' });
+            if (!response.ok) {
+                return false;
+            }
+
+            const data = await response.json();
+            if (!data || !Array.isArray(data.buildings)) {
+                console.warn('data/project.json 格式无效，回退到手动导入模式');
+                return false;
+            }
+
+            currentData = data;
+            applyLocationFromData(data);
+            loadBuildings(data);
+            clearSunlightResults();
+            hideImportUI();
+            // Auto-apply pre-computed winter results if available
+            if (data.precomputedSunlight && data.precomputedSunlight.winter) {
+                applyPrecomputedResults(data.precomputedSunlight.winter);
+            }
+            return true;
+        } catch (err) {
+            console.log('未检测到 data/project.json，使用手动导入模式');
+            return false;
         }
     }
 
@@ -1895,6 +2043,17 @@
                 customDeclination = null;
             }
 
+            // In simplified mode, load pre-computed results for standard seasons
+            if (simplifiedMode && currentData && currentData.precomputedSunlight) {
+                const preMap = { '-23.44': 'winter', '0': 'equinox', '23.44': 'summer' };
+                const preKey = preMap[value];
+                if (preKey && currentData.precomputedSunlight[preKey]) {
+                    updateSun();
+                    applyPrecomputedResults(currentData.precomputedSunlight[preKey]);
+                    return;
+                }
+            }
+
             updateSun();
             clearSunlightResults();
         });
@@ -1960,6 +2119,11 @@
             setTimeout(() => {
                 progress.style.display = 'none';
             }, 1500);
+        });
+
+        // 导出分析按钮
+        document.getElementById('exportAnalysisBtn').addEventListener('click', () => {
+            exportAnalysis();
         });
 
         // 热力图开关
@@ -2045,16 +2209,24 @@
     updateCompassPointerRotation();
     animate();
 
-    // 尝试加载默认数据
-    if (typeof DEFAULT_DATA !== 'undefined') {
-        console.log('检测到默认数据，正在加载...');
-        currentData = DEFAULT_DATA;
-        applyLocationFromData(DEFAULT_DATA);
-        loadBuildings(DEFAULT_DATA);
-        document.getElementById('empty-state').style.display = 'none';
-    } else {
-        console.log('未检测到 DEFAULT_DATA 变量，等待手动上传文件');
-    }
+    (async function initInitialData() {
+        const autoLoaded = await initAutoDataLoad();
+        if (autoLoaded) {
+            return;
+        }
+
+        showImportUI();
+        // 尝试加载默认数据
+        if (typeof DEFAULT_DATA !== 'undefined') {
+            console.log('检测到默认数据，正在加载...');
+            currentData = DEFAULT_DATA;
+            applyLocationFromData(DEFAULT_DATA);
+            loadBuildings(DEFAULT_DATA);
+            document.getElementById('empty-state').style.display = 'none';
+        } else {
+            console.log('未检测到 DEFAULT_DATA 变量，等待手动上传文件');
+        }
+    })();
 
     // ========== 语言切换功能 ==========
     function initLanguageSwitcher() {
@@ -2104,6 +2276,9 @@
                 el.textContent = translation;
             }
         });
+
+        // 在简化模式下重新更正步骤编号
+        if (simplifiedMode) renumberSimplifiedSteps();
 
         // 更新页面标题
         document.title = i18n.t('viewer.title');

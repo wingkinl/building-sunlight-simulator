@@ -9,9 +9,6 @@
 **Lightweight 3D Sunlight Analysis Tool for Building Planning**
 
 <p>
-    <a href="https://github.com/ruanyf/weekly/blob/master/docs/issue-382.md">
-        <img src="https://img.shields.io/badge/Featured_in-Tech_Enthusiast_Weekly_#382-ff69b4?style=flat-square&logo=rss" alt="Tech Enthusiast Weekly">
-    </a>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License">
   </a>
@@ -24,7 +21,7 @@
 </p>
 
 <h3>
-  👉 <a href="https://seanwong17.github.io/building-sunlight-simulator/">Click for Live Demo</a> 👈
+  👉 <a href="https://wingkinl.github.io/building-sunlight-simulator/">Click for Live Demo</a> 👈
 </h3>
 
 <p style="font-size: 13px; color: #666;">

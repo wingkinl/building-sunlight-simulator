@@ -22,6 +22,7 @@
 
 <h3>
   👉 <a href="https://wingkinl.github.io/building-sunlight-simulator/">Click for Live Demo</a> 👈
+  👉 <a href="https://wingkinl.github.io/building-sunlight-simulator/editor">Config Editor</a> 👈
 </h3>
 
 <p style="font-size: 13px; color: #666;">
@@ -39,6 +40,17 @@
 **Building Sunlight Simulator** is a web-based tool for architectural planning and sunlight simulation.
 
 It allows users to draw building outlines directly over a floor plan image (JPG/PNG) in the browser, instantly generating a 3D scene. By combining precise geographical coordinates with solar trajectory algorithms, it performs accurate sunlight and shadow analysis for target buildings. The project is purely frontend-based, has no backend dependencies, and supports offline usage.
+
+This repository builds on the original project by <a href="https://github.com/SeanWong17">SeanWong17</a>, with ongoing maintenance and feature extensions by <a href="https://github.com/wingkinl">wingkinl</a>.
+
+---
+
+## 🆕 Additions In This Fork
+
+1. Support for custom split ratios when dividing a building into apartments.
+2. Support for Free Draw apartment cutting.
+3. Heatmap rendering across all feasible building facades, not just a single side.
+4. A more compact layout with responsive behavior for mobile devices.
 
 ---
 
@@ -204,5 +216,6 @@ Issues and Pull Requests are welcome!
 
 <div align="center">
   <br>
-  Made with ❤️ by <a href="https://github.com/seanwong17">seanwong17</a>
+  Original project by <a href="https://github.com/SeanWong17">SeanWong17</a><br>
+  Extended and maintained by <a href="https://github.com/wingkinl">wingkinl</a>
 </div>

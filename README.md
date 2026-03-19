@@ -22,6 +22,7 @@
 
 <h3>
   👉 <a href="https://wingkinl.github.io/building-sunlight-simulator/">点击查看在线演示 (Live Demo)</a> 👈
+  👉 <a href="https://wingkinl.github.io/building-sunlight-simulator/editor">配置生成页面</a> 👈
 </h3>
 
 <p style="font-size: 13px; color: #666;">
@@ -39,6 +40,17 @@
 **Building Sunlight Simulator** 是一套基于 Web 技术的楼盘规划与采光模拟工具。
 
 它允许用户直接在浏览器中通过规划图（JPG/PNG）绘制建筑轮廓，生成 3D 场景，并结合地理纬度和太阳轨迹算法，对目标建筑进行精确的日照遮挡分析。项目纯前端实现，无后端依赖，支持离线使用。
+
+本仓库基于 <a href="https://github.com/SeanWong17">SeanWong17</a> 的原始项目继续开发，当前由 <a href="https://github.com/wingkinl">wingkinl</a> 维护并扩展功能。
+
+---
+
+## 🆕 本仓库新增功能
+
+1. 支持为楼栋户型设置自定义分割比例。
+2. 支持通过 Free Draw 自由切分楼栋户型。
+3. 热力图可显示在建筑所有可能受光的立面上，而不仅限于单一朝向。
+4. 界面布局更紧凑，并针对移动端设备进行了响应式优化。
 
 ---
 
@@ -192,17 +204,18 @@ building-sunlight-simulator/
 
 ## 📄 License
 
-[MIT License](LICENSE) © 2026 SeanWong17
+[MIT License](LICENSE) © 2026 wingkinl
 
 ---
 
 ## 📈 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=SeanWong17/building-sunlight-simulator&type=Date)](https://star-history.com/#SeanWong17/building-sunlight-simulator&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=wingkinl/building-sunlight-simulator&type=Date)](https://star-history.com/#wingkinl/building-sunlight-simulator&Date)
 
 ---
 
 <div align="center">
   <br>
-  Made with ❤️ by <a href="https://github.com/seanwong17">seanwong17</a>
+  Original project by <a href="https://github.com/SeanWong17">SeanWong17</a><br>
+  Extended and maintained by <a href="https://github.com/wingkinl">wingkinl</a>
 </div>

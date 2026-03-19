@@ -34,12 +34,13 @@ const i18n = (function() {
             // 查看器 (index.html)
             viewer: {
                 title: '楼盘采光可视化 - 日照模拟系统',
-                emptyState: '请在右上角导入 JSON 配置文件',
+                emptyState: '请在右上角导入 JSON 配置文件，或直接拖拽到页面中',
                 pageTitle: '☀️ 楼盘采光模拟',
                 
                 // 控制面板
                 step1: '1. 导入数据',
                 selectJson: '📂 选择 JSON 文件',
+                dropJsonHint: '拖拽 JSON 文件到此处导入',
                 
                 step2: '2. 项目位置',
                 selectCity: '选择城市',
@@ -96,6 +97,7 @@ const i18n = (function() {
                 errorParseFailed: 'JSON 解析失败，请检查文件格式',
                 errorCalcFailed: '计算过程中出错，请重试',
                 errorFileRead: '文件读取失败，请重试',
+                errorInvalidJsonFile: '请拖入或选择 JSON 文件',
 
                 // 计算进度
                 calculatingProgress: '计算中... {0}%',
@@ -233,12 +235,13 @@ const i18n = (function() {
             // Viewer (index.html)
             viewer: {
                 title: 'Building Sunlight Visualization - Sunlight Simulation System',
-                emptyState: 'Please import JSON configuration file in the top right corner',
+                emptyState: 'Please import a JSON configuration file from the top right, or drag one onto the page',
                 pageTitle: '☀️ Building Sunlight Simulation',
                 
                 // Control panel
                 step1: '1. Import Data',
                 selectJson: '📂 Select JSON File',
+                dropJsonHint: 'Drop a JSON file here to import',
                 
                 step2: '2. Project Location',
                 selectCity: 'Select City',
@@ -295,6 +298,7 @@ const i18n = (function() {
                 errorParseFailed: 'JSON parsing failed, please check file format',
                 errorCalcFailed: 'Error during calculation, please try again',
                 errorFileRead: 'File read failed, please try again',
+                errorInvalidJsonFile: 'Please drop or select a JSON file',
 
                 // Calculation progress
                 calculatingProgress: 'Calculating... {0}%',

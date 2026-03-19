@@ -51,6 +51,7 @@ This repository builds on the original project by <a href="https://github.com/Se
 2. Support for Free Draw apartment cutting.
 3. Heatmap rendering across all feasible building facades, not just a single side.
 4. A more compact layout with responsive behavior for mobile devices.
+5. Supoort drag and drop json config file and image files to import them directly.
 
 ---
 

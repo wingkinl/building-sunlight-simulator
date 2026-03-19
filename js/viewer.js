@@ -1323,12 +1323,17 @@
         document.getElementById('sunlightStats').style.display = 'none';
     }
 
-    // ========== 加载楼栋数据 ==========
-    const jsonInput = document.getElementById('jsonInput');
-
-    jsonInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+    function importJsonFile(file) {
         if (!file) return;
+
+        const fileName = String(file.name || '').toLowerCase();
+        const fileType = String(file.type || '').toLowerCase();
+        const isJsonFile = fileName.endsWith('.json') || fileType === 'application/json' || fileType === 'text/json';
+        if (!isJsonFile) {
+            alert(i18n.t('viewer.errorInvalidJsonFile'));
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (ev) => {
             try {
@@ -1347,6 +1352,58 @@
             alert(i18n.t('viewer.errorFileRead'));
         };
         reader.readAsText(file);
+    }
+
+    // ========== 加载楼栋数据 ==========
+    const jsonInput = document.getElementById('jsonInput');
+    const dropOverlay = document.getElementById('dropOverlay');
+    let dragDepth = 0;
+
+    function setDropOverlayVisible(visible) {
+        if (!dropOverlay) return;
+        dropOverlay.classList.toggle('is-active', visible);
+        dropOverlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    }
+
+    jsonInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        importJsonFile(file);
+        jsonInput.value = '';
+    });
+
+    window.addEventListener('dragenter', (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        dragDepth += 1;
+        setDropOverlayVisible(true);
+    });
+
+    window.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDropOverlayVisible(true);
+    });
+
+    window.addEventListener('dragleave', (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) {
+            setDropOverlayVisible(false);
+        }
+    });
+
+    window.addEventListener('drop', (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        dragDepth = 0;
+        setDropOverlayVisible(false);
+
+        const files = Array.from(e.dataTransfer.files || []);
+        if (!files.length) return;
+        importJsonFile(files[0]);
     });
 
     function disposeMaterial(m) {

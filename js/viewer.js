@@ -208,6 +208,33 @@
     let customDeclination = null; // 存储自定义日期的赤纬角
     let hoverOccluderMeshes = [];
 
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingText = document.getElementById('loadingText');
+
+    function waitForNextPaint() {
+        return new Promise(resolve => {
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+        });
+    }
+
+    async function waitUntilSceneRendered() {
+        // Keep the loading overlay visible until the scene has had a chance
+        // to render at least one fresh frame after heavy import work.
+        await waitForNextPaint();
+        controls.update();
+        renderer.render(scene, camera);
+        await waitForNextPaint();
+    }
+
+    function setLoadingOverlayVisible(visible, messageKey = 'viewer.importLoading') {
+        if (!loadingOverlay) return;
+        loadingOverlay.classList.toggle('is-active', visible);
+        loadingOverlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+        if (visible && loadingText && typeof i18n?.t === 'function') {
+            loadingText.textContent = i18n.t(messageKey);
+        }
+    }
+
     // ========== 纹理与材质工具 ==========
     // advancedDividerUs: optional array of U-values [0..1] where cut-line dividers
     // should appear on the facade (used for advanced split mode instead of ratios).
@@ -1420,18 +1447,21 @@
             return false;
         }
 
+        setLoadingOverlayVisible(true);
         try {
             const response = await fetch('./data/project.json', { cache: 'no-store' });
             if (!response.ok) {
                 return false;
             }
 
+            await waitForNextPaint();
             const data = await response.json();
             if (!data || !Array.isArray(data.buildings)) {
                 console.warn('data/project.json 格式无效，回退到手动导入模式');
                 return false;
             }
 
+            await waitForNextPaint();
             currentData = data;
             applyLocationFromData(data);
             loadBuildings(data);
@@ -1442,6 +1472,9 @@
         } catch (err) {
             console.log('未检测到 data/project.json，使用手动导入模式');
             return false;
+        } finally {
+            await waitUntilSceneRendered();
+            setLoadingOverlayVisible(false);
         }
     }
 
@@ -1553,10 +1586,13 @@
             return;
         }
 
+        setLoadingOverlayVisible(true);
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
             try {
+                await waitForNextPaint();
                 const data = JSON.parse(ev.target.result);
+                await waitForNextPaint();
                 applyLocationFromData(data);
                 currentData = data;
                 loadBuildings(data);
@@ -1566,9 +1602,13 @@
             } catch (err) {
                 alert(i18n.t('viewer.errorParseFailed'));
                 console.error(err);
+            } finally {
+                await waitUntilSceneRendered();
+                setLoadingOverlayVisible(false);
             }
         };
         reader.onerror = () => {
+            setLoadingOverlayVisible(false);
             alert(i18n.t('viewer.errorFileRead'));
         };
         reader.readAsText(file);

@@ -10,6 +10,12 @@
 
 <body>
     <div id="empty-state" data-i18n="viewer.emptyState">请在右上角导入 JSON 配置文件</div>
+    <div id="loadingOverlay" class="loading-overlay" aria-hidden="true">
+        <div class="loading-card" role="status" aria-live="polite">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <p id="loadingText" class="loading-text" data-i18n="viewer.importLoading">正在加载数据，请稍候...</p>
+        </div>
+    </div>
     <div id="dropOverlay" class="drop-overlay" aria-hidden="true">
         <div class="drop-overlay-card" data-i18n="viewer.dropJsonHint">拖拽 JSON 文件到此处导入</div>
     </div>

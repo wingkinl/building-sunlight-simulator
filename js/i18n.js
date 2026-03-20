@@ -41,6 +41,7 @@ const i18n = (function() {
                 step1: '1. 导入数据',
                 selectJson: '📂 选择 JSON 文件',
                 dropJsonHint: '拖拽 JSON 文件到此处导入',
+                importLoading: '正在加载数据，请稍候...',
                 
                 step2: '2. 项目位置',
                 selectCity: '选择城市',
@@ -252,6 +253,7 @@ const i18n = (function() {
                 step1: '1. Import Data',
                 selectJson: '📂 Select JSON File',
                 dropJsonHint: 'Drop a JSON file here to import',
+                importLoading: 'Loading data, please wait...',
                 
                 step2: '2. Project Location',
                 selectCity: 'Select City',

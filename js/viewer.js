@@ -996,6 +996,141 @@
         return intersects.length === 0;
     }
 
+    function buildSunlightResultsFromPoints(points, declination, latitude, timeStep) {
+        const results = {
+            points,
+            declination,
+            latitude,
+            timeStep,
+            buildings: {}
+        };
+
+        let sumMaxForAll = 0;
+        let totalUniqUnits = 0;
+        let belowStd = 0;
+        let globalMin = Infinity;
+        let globalMax = 0;
+
+        points.forEach(p => {
+            if (!results.buildings[p.buildingName]) {
+                results.buildings[p.buildingName] = {
+                    name: p.buildingName,
+                    unitsMap: new Map(),
+                    minHours: Infinity,
+                    maxHours: 0,
+                    avgHours: 0,
+                    totalUnits: 0
+                };
+            }
+            const bldg = results.buildings[p.buildingName];
+            const key = `${p.floor}-${p.unit}`;
+            if (!bldg.unitsMap.has(key)) bldg.unitsMap.set(key, []);
+            bldg.unitsMap.get(key).push(p);
+        });
+
+        for (const bName of Object.keys(results.buildings)) {
+            const bldg = results.buildings[bName];
+            let bldgSumMax = 0;
+
+            for (const pts of bldg.unitsMap.values()) {
+                const unitMaxH = Math.max(...pts.map(p => p.sunlightHours));
+                pts.forEach(p => p.unitMaxHours = unitMaxH);
+
+                bldg.minHours = Math.min(bldg.minHours, unitMaxH);
+                bldg.maxHours = Math.max(bldg.maxHours, unitMaxH);
+                bldgSumMax += unitMaxH;
+                bldg.totalUnits++;
+
+                globalMin = Math.min(globalMin, unitMaxH);
+                globalMax = Math.max(globalMax, unitMaxH);
+                sumMaxForAll += unitMaxH;
+                totalUniqUnits++;
+
+                if (unitMaxH < 2) belowStd++;
+            }
+
+            if (bldg.totalUnits > 0) {
+                bldg.avgHours = bldgSumMax / bldg.totalUnits;
+            }
+            delete bldg.unitsMap;
+        }
+
+        results.totalUnits = totalUniqUnits;
+        results.minHours = globalMin === Infinity ? 0 : globalMin;
+        results.maxHours = globalMax;
+        results.avgHours = totalUniqUnits > 0 ? sumMaxForAll / totalUniqUnits : 0;
+        results.belowStandard = belowStd;
+
+        return results;
+    }
+
+    function quantizeTo2(value) {
+        const n = Number(value);
+        if (!isFinite(n)) return 0;
+        return Math.round(n * 100) / 100;
+    }
+
+    function createCompactPrecomputedResult(results) {
+        if (!results || !Array.isArray(results.points)) return null;
+        const hours = results.points.map(p => quantizeTo2(p.sunlightHours));
+        return {
+            v: 2,
+            d: quantizeTo2(results.declination),
+            lat: quantizeTo2(results.latitude),
+            t: quantizeTo2(results.timeStep),
+            n: hours.length,
+            h: hours
+        };
+    }
+
+    function rebuildSamplingPointsFromCurrentData(data) {
+        if (!data || !Array.isArray(data.buildings)) return [];
+        const allPoints = [];
+        data.buildings.forEach((b, idx) => {
+            if (b.isThisCommunity) {
+                const points = calculateSamplingPoints(b, idx);
+                allPoints.push(...points);
+            }
+        });
+        return allPoints;
+    }
+
+    function isCompactPrecomputedResult(obj) {
+        return !!(obj && typeof obj === 'object' && obj.v === 2 && Array.isArray(obj.h));
+    }
+
+    function inflateCompactPrecomputedResult(compact, data) {
+        if (!isCompactPrecomputedResult(compact)) return null;
+
+        const allPoints = rebuildSamplingPointsFromCurrentData(data);
+        const expectedCount = Number(compact.n);
+        const hours = compact.h;
+
+        if (allPoints.length !== hours.length || (isFinite(expectedCount) && expectedCount !== hours.length)) {
+            console.warn('预计算日照数据与当前楼栋采样点数量不匹配，忽略预计算结果。', {
+                expected: expectedCount,
+                hoursLength: hours.length,
+                pointsLength: allPoints.length
+            });
+            return null;
+        }
+
+        for (let i = 0; i < allPoints.length; i++) {
+            allPoints[i].sunlightHours = Number(hours[i]) || 0;
+        }
+
+        const declination = Number(compact.d);
+        const latitude = Number(compact.lat);
+        const timeStep = Number(compact.t);
+
+        return buildSunlightResultsFromPoints(
+            allPoints,
+            isFinite(declination) ? declination : 0,
+            isFinite(latitude) ? latitude : LATITUDE,
+            isFinite(timeStep) && timeStep > 0 ? timeStep : CONFIG.SUNLIGHT_ANALYSIS.TIME_INTERVAL
+        );
+    }
+
     /**
      * 执行日照时长计算
      */
@@ -1021,13 +1156,7 @@
         const timeStep = CONFIG.SUNLIGHT_ANALYSIS.TIME_INTERVAL; // 固定6分钟间隔
 
         // 收集本小区建筑的采样点
-        const allPoints = [];
-        currentData.buildings.forEach((b, idx) => {
-            if (b.isThisCommunity) {
-                const points = calculateSamplingPoints(b, idx);
-                allPoints.push(...points);
-            }
-        });
+        const allPoints = rebuildSamplingPointsFromCurrentData(currentData);
 
         if (allPoints.length === 0) {
             alert(i18n.t('viewer.errorNoBuilding'));
@@ -1069,74 +1198,7 @@
             }
         }
 
-        // 汇总结果
-        const results = {
-            points: allPoints,
-            declination,
-            latitude: LATITUDE,
-            timeStep,
-            buildings: {}
-        };
-
-        let sumMaxForAll = 0;
-        let totalUniqUnits = 0;
-        let belowStd = 0;
-        let globalMin = Infinity;
-        let globalMax = 0;
-
-        // Group points by building and unit
-        allPoints.forEach(p => {
-            if (!results.buildings[p.buildingName]) {
-                results.buildings[p.buildingName] = {
-                    name: p.buildingName,
-                    unitsMap: new Map(),
-                    minHours: Infinity,
-                    maxHours: 0,
-                    avgHours: 0,
-                    totalUnits: 0
-                };
-            }
-            const bldg = results.buildings[p.buildingName];
-            const key = `${p.floor}-${p.unit}`;
-            if (!bldg.unitsMap.has(key)) bldg.unitsMap.set(key, []);
-            bldg.unitsMap.get(key).push(p);
-        });
-
-        // Compute aggregations at unit level using max face
-        for (const bName of Object.keys(results.buildings)) {
-            const bldg = results.buildings[bName];
-            let bldgSumMax = 0;
-
-            for (const pts of bldg.unitsMap.values()) {
-                const unitMaxH = Math.max(...pts.map(p => p.sunlightHours));
-                pts.forEach(p => p.unitMaxHours = unitMaxH); // Set to point for UI
-
-                bldg.minHours = Math.min(bldg.minHours, unitMaxH);
-                bldg.maxHours = Math.max(bldg.maxHours, unitMaxH);
-                bldgSumMax += unitMaxH;
-                bldg.totalUnits++;
-
-                globalMin = Math.min(globalMin, unitMaxH);
-                globalMax = Math.max(globalMax, unitMaxH);
-                sumMaxForAll += unitMaxH;
-                totalUniqUnits++;
-
-                if (unitMaxH < 2) belowStd++;
-            }
-
-            if (bldg.totalUnits > 0) {
-                bldg.avgHours = bldgSumMax / bldg.totalUnits;
-            }
-            delete bldg.unitsMap; // tidy up
-        }
-
-        results.totalUnits = totalUniqUnits;
-        results.minHours = globalMin === Infinity ? 0 : globalMin;
-        results.maxHours = globalMax;
-        results.avgHours = totalUniqUnits > 0 ? sumMaxForAll / totalUniqUnits : 0;
-        results.belowStandard = belowStd;
-
-        return results;
+        return buildSunlightResultsFromPoints(allPoints, declination, LATITUDE, timeStep);
     }
 
     /**
@@ -1299,14 +1361,18 @@
 
     function applyPrecomputedResults(results) {
         if (!results) return;
-        sunlightResults = results;
+        const runtimeResults = isCompactPrecomputedResult(results)
+            ? inflateCompactPrecomputedResult(results, currentData)
+            : results;
+        if (!runtimeResults) return;
+        sunlightResults = runtimeResults;
         document.getElementById('toggleHeatmap').disabled = false;
         document.getElementById('heatmapLegend').style.display = 'block';
         document.getElementById('toggleHeatmap').checked = true;
         // Precomputed payloads from external pipelines may omit some optional fields.
         // Stats should not block heatmap display.
         try {
-            showSunlightStats(results);
+            showSunlightStats(runtimeResults);
         } catch (err) {
             console.warn('预计算统计信息渲染失败，继续显示热力图:', err);
         }
@@ -1352,7 +1418,7 @@
     }
 
     function looksLikePrecomputedResult(obj) {
-        return !!(obj && typeof obj === 'object' && Array.isArray(obj.points));
+        return !!(obj && typeof obj === 'object' && (Array.isArray(obj.points) || isCompactPrecomputedResult(obj)));
     }
 
     function findFirstPrecomputedResult(container) {
@@ -1429,8 +1495,14 @@
                 await writable.close();
                 return { saved: true, canceled: false };
             } catch (err) {
-                if (err && (err.name === 'AbortError' || err.name === 'SecurityError')) {
+                if (err && err.name === 'AbortError') {
                     return { saved: false, canceled: true };
+                }
+                // SecurityError usually means user-activation expired after long async work.
+                // Fall back to plain download to avoid silently losing export output.
+                if (err && err.name === 'SecurityError') {
+                    Utils.downloadFile(content, filename, 'application/json');
+                    return { saved: true, canceled: false };
                 }
                 throw err;
             }
@@ -1474,7 +1546,13 @@
                     calcErr.isCalcError = true;
                     throw calcErr;
                 }
-                precomputed[key] = result;
+                const compact = createCompactPrecomputedResult(result);
+                if (!compact) {
+                    const compactErr = new Error('Compact serialization failed for ' + key);
+                    compactErr.isCalcError = true;
+                    throw compactErr;
+                }
+                precomputed[key] = compact;
             }
 
             const hadSunlightData = !!sunlightResults;

@@ -389,12 +389,42 @@ input[type="range"] {
     left: 16px;
     bottom: 16px;
     width: 280px;
-    background: var(--ui-bg);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(241, 248, 255, 0.24));
+    border: 1px solid rgba(255, 255, 255, 0.45);
     border-radius: var(--radius);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 24px 50px rgba(31, 64, 104, 0.2), 0 10px 24px rgba(15, 30, 58, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.65);
     z-index: 15;
-    backdrop-filter: saturate(180%) blur(8px);
+    backdrop-filter: saturate(185%) blur(18px);
+    -webkit-backdrop-filter: saturate(185%) blur(18px);
+    isolation: isolate;
     overflow: hidden;
+}
+
+.unit-info-panel::before,
+.unit-info-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.unit-info-panel::before {
+    background:
+        radial-gradient(130px 90px at 84% 10%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 70%),
+        radial-gradient(220px 160px at 8% 100%, rgba(154, 214, 255, 0.26), rgba(154, 214, 255, 0) 72%);
+    opacity: 0.95;
+}
+
+.unit-info-panel::after {
+    inset: 1px;
+    border-radius: calc(var(--radius) - 1px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: inset 0 -18px 30px rgba(188, 227, 255, 0.14), inset 0 18px 26px rgba(255, 255, 255, 0.22);
+}
+
+.unit-info-panel > * {
+    position: relative;
+    z-index: 1;
 }
 
 .unit-info-header {

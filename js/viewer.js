@@ -7,7 +7,7 @@
     // ========== 场景初始化 ==========
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(CONFIG.SCENE.BACKGROUND_COLOR);
-    scene.fog = new THREE.Fog(CONFIG.SCENE.FOG_COLOR, CONFIG.SCENE.FOG_NEAR, CONFIG.SCENE.FOG_FAR);
+    scene.fog = null;
 
     const canvasContainer = document.getElementById('canvas-container');
     const initialWidth = canvasContainer.clientWidth || window.innerWidth;

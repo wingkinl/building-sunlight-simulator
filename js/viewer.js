@@ -1342,6 +1342,35 @@
         return true;
     }
 
+    async function saveJsonWithDialog(content, filename) {
+        const blob = new Blob([content], { type: 'application/json' });
+
+        if (typeof window.showSaveFilePicker === 'function') {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: 'JSON File',
+                        accept: { 'application/json': ['.json'] }
+                    }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                return { saved: true, canceled: false };
+            } catch (err) {
+                if (err && (err.name === 'AbortError' || err.name === 'SecurityError')) {
+                    return { saved: false, canceled: true };
+                }
+                throw err;
+            }
+        }
+
+        // Fallback for browsers/contexts without File System Access API.
+        Utils.downloadFile(content, filename, 'application/json');
+        return { saved: true, canceled: false };
+    }
+
     async function exportAnalysis() {
         if (!currentData || !currentData.buildings) {
             alert(i18n.t('viewer.errorNoData'));
@@ -1370,22 +1399,42 @@
                     const overall = (i + p) / seasons.length;
                     progressFill.style.width = Math.round(overall * 100) + '%';
                 }, dec);
-                if (!result) throw new Error('Calculation failed for ' + key);
+                if (!result) {
+                    const calcErr = new Error('Calculation failed for ' + key);
+                    calcErr.isCalcError = true;
+                    throw calcErr;
+                }
                 precomputed[key] = result;
             }
 
+            const hadSunlightData = !!sunlightResults;
             const exportData = Object.assign({}, currentData, { precomputedSunlight: precomputed });
+            currentData = exportData;
+
+            if (!hadSunlightData) {
+                tryApplyPrecomputedForCurrentSelection(currentData);
+                await waitUntilSceneRendered();
+            }
+
             const json = JSON.stringify(exportData, null, 2);
             const filename = (currentData.projectName || 'project') + '_with_analysis.json';
-            Utils.downloadFile(json, filename, 'application/json');
+            const saveResult = await saveJsonWithDialog(json, filename);
+            if (saveResult.canceled) {
+                progressText.textContent = i18n.t('viewer.exportAnalysisSaveCanceled');
+                return;
+            }
             progressText.textContent = i18n.t('viewer.exportAnalysisComplete');
         } catch (err) {
             console.error('Export analysis error:', err);
-            alert(i18n.t('viewer.errorCalcFailed'));
+            if (err?.isCalcError) {
+                alert(i18n.t('viewer.errorCalcFailed'));
+            } else {
+                alert(i18n.t('viewer.exportAnalysisSaveFailed'));
+            }
+        } finally {
+            btn.disabled = false;
+            setTimeout(() => { calcProgress.style.display = 'none'; }, 1500);
         }
-
-        btn.disabled = false;
-        setTimeout(() => { calcProgress.style.display = 'none'; }, 1500);
     }
 
     function renumberSimplifiedSteps() {

@@ -207,6 +207,7 @@
     let simplifiedMode = false; // true when data/project.json was auto-loaded
     let customDeclination = null; // 存储自定义日期的赤纬角
     let hoverOccluderMeshes = [];
+    const emptyStateEl = document.getElementById('empty-state');
 
     const loadingOverlay = document.getElementById('loadingOverlay');
     const loadingText = document.getElementById('loadingText');
@@ -233,6 +234,13 @@
         if (visible && loadingText && typeof i18n?.t === 'function') {
             loadingText.textContent = i18n.t(messageKey);
         }
+    }
+
+    function setEmptyStateVisible(visible) {
+        if (!emptyStateEl) return;
+        emptyStateEl.style.display = visible ? '' : 'none';
+        emptyStateEl.hidden = !visible;
+        emptyStateEl.setAttribute('aria-hidden', visible ? 'false' : 'true');
     }
 
     // ========== 纹理与材质工具 ==========
@@ -1450,7 +1458,6 @@
         const dropOverlayEl = document.getElementById('dropOverlay');
         const importGroup = document.querySelector('.file-upload')?.closest('.control-group');
         const locationGroup = document.querySelector('.location-config')?.closest('.control-group');
-        const emptyState = document.getElementById('empty-state');
 
         if (githubLink) githubLink.style.display = 'none';
         if (dropOverlayEl) {
@@ -1460,7 +1467,7 @@
         }
         if (importGroup) importGroup.style.display = 'none';
         if (locationGroup) locationGroup.style.display = 'none';
-        if (emptyState) emptyState.style.display = 'none';
+        setEmptyStateVisible(false);
         const exportBtn = document.getElementById('exportAnalysisBtn');
         if (exportBtn) exportBtn.style.display = 'none';
         const compass = document.getElementById('uiCompass');
@@ -1514,6 +1521,7 @@
             currentData = data;
             applyLocationFromData(data);
             loadBuildings(data);
+            setEmptyStateVisible(false);
             clearSunlightResults();
             hideImportUI();
             tryApplyPrecomputedForCurrentSelection(data);
@@ -1647,7 +1655,7 @@
                 loadBuildings(data);
                 clearSunlightResults();
                 tryApplyPrecomputedForCurrentSelection(data);
-                document.getElementById('empty-state').style.display = 'none';
+                setEmptyStateVisible(false);
             } catch (err) {
                 alert(i18n.t('viewer.errorParseFailed'));
                 console.error(err);
@@ -1738,7 +1746,9 @@
         hoverOccluderMeshes = [];
         if (data.latitude) LATITUDE = data.latitude;
 
-        if (!data || !Array.isArray(data.buildings) || data.buildings.length === 0) return;
+        const hasBuildings = !!(data && Array.isArray(data.buildings) && data.buildings.length > 0);
+        setEmptyStateVisible(!hasBuildings);
+        if (!hasBuildings) return;
 
         data.buildings.forEach((b, index) => {
             if (!b.shape || b.shape.length < 3) return;
@@ -2373,6 +2383,7 @@
             return;
         }
 
+        setEmptyStateVisible(true);
         showImportUI();
         // 尝试加载默认数据
         if (typeof DEFAULT_DATA !== 'undefined') {
@@ -2380,7 +2391,7 @@
             currentData = DEFAULT_DATA;
             applyLocationFromData(DEFAULT_DATA);
             loadBuildings(DEFAULT_DATA);
-            document.getElementById('empty-state').style.display = 'none';
+            setEmptyStateVisible(false);
         } else {
             console.log('未检测到 DEFAULT_DATA 变量，等待手动上传文件');
         }

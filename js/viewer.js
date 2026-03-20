@@ -1467,7 +1467,6 @@
         }
         if (importGroup) importGroup.style.display = 'none';
         if (locationGroup) locationGroup.style.display = 'none';
-        setEmptyStateVisible(false);
         const exportBtn = document.getElementById('exportAnalysisBtn');
         if (exportBtn) exportBtn.style.display = 'none';
         const compass = document.getElementById('uiCompass');
@@ -1497,6 +1496,9 @@
     }
 
     async function initAutoDataLoad() {
+        // Avoid showing empty-state hint while we attempt to auto-load project data.
+        setEmptyStateVisible(false);
+
         // Browsers block fetch() to local JSON under file://; use a local HTTP server instead.
         if (window.location.protocol === 'file:') {
             console.warn('当前为 file:// 打开页面，浏览器会阻止自动读取 data/project.json。请用本地服务器访问 index.html。');
@@ -1521,7 +1523,6 @@
             currentData = data;
             applyLocationFromData(data);
             loadBuildings(data);
-            setEmptyStateVisible(false);
             clearSunlightResults();
             hideImportUI();
             tryApplyPrecomputedForCurrentSelection(data);
@@ -1655,7 +1656,6 @@
                 loadBuildings(data);
                 clearSunlightResults();
                 tryApplyPrecomputedForCurrentSelection(data);
-                setEmptyStateVisible(false);
             } catch (err) {
                 alert(i18n.t('viewer.errorParseFailed'));
                 console.error(err);
@@ -2383,7 +2383,6 @@
             return;
         }
 
-        setEmptyStateVisible(true);
         showImportUI();
         // 尝试加载默认数据
         if (typeof DEFAULT_DATA !== 'undefined') {
@@ -2391,9 +2390,11 @@
             currentData = DEFAULT_DATA;
             applyLocationFromData(DEFAULT_DATA);
             loadBuildings(DEFAULT_DATA);
-            setEmptyStateVisible(false);
+            const hasDefaultBuildings = Array.isArray(DEFAULT_DATA.buildings) && DEFAULT_DATA.buildings.length > 0;
+            setEmptyStateVisible(!hasDefaultBuildings);
         } else {
             console.log('未检测到 DEFAULT_DATA 变量，等待手动上传文件');
+            setEmptyStateVisible(true);
         }
     })();
 

@@ -243,6 +243,10 @@
         emptyStateEl.setAttribute('aria-hidden', visible ? 'false' : 'true');
     }
 
+    function hasBuildingsData(data) {
+        return !!(data && Array.isArray(data.buildings) && data.buildings.length > 0);
+    }
+
     // ========== 纹理与材质工具 ==========
     // advancedDividerUs: optional array of U-values [0..1] where cut-line dividers
     // should appear on the facade (used for advanced split mode instead of ratios).
@@ -1299,8 +1303,23 @@
         document.getElementById('toggleHeatmap').disabled = false;
         document.getElementById('heatmapLegend').style.display = 'block';
         document.getElementById('toggleHeatmap').checked = true;
-        showSunlightStats(results);
+        // Precomputed payloads from external pipelines may omit some optional fields.
+        // Stats should not block heatmap display.
+        try {
+            showSunlightStats(results);
+        } catch (err) {
+            console.warn('预计算统计信息渲染失败，继续显示热力图:', err);
+        }
         toggleHeatmap(true);
+    }
+
+    function getPrecomputedSeasonCandidates(seasonValue) {
+        const map = {
+            '-23.44': ['winter', 'winterSolstice', 'winter_solstice', '-23.44', 'dec:-23.44'],
+            '0': ['equinox', 'springAutumn', 'spring_autumn', '0', 'dec:0'],
+            '23.44': ['summer', 'summerSolstice', 'summer_solstice', '23.44', 'dec:23.44']
+        };
+        return map[String(seasonValue)] || [];
     }
 
     function getPrecomputedKeyForCurrentSelection(precomputedSunlight) {
@@ -1310,9 +1329,9 @@
         const customDateInput = document.getElementById('customDateInput');
         const seasonValue = seasonSelect?.value;
 
-        const preMap = { '-23.44': 'winter', '0': 'equinox', '23.44': 'summer' };
-        if (seasonValue && preMap[seasonValue] && precomputedSunlight[preMap[seasonValue]]) {
-            return preMap[seasonValue];
+        const seasonCandidates = getPrecomputedSeasonCandidates(seasonValue);
+        for (const key of seasonCandidates) {
+            if (precomputedSunlight[key]) return key;
         }
 
         if (seasonValue === 'custom') {
@@ -1332,22 +1351,65 @@
         return null;
     }
 
-    function tryApplyPrecomputedForCurrentSelection(data) {
-        const precomputed = data?.precomputedSunlight;
-        const key = getPrecomputedKeyForCurrentSelection(precomputed);
-        if (!key) return false;
+    function looksLikePrecomputedResult(obj) {
+        return !!(obj && typeof obj === 'object' && Array.isArray(obj.points));
+    }
 
-        let result = null;
-        if (key.startsWith('custom.')) {
-            const customKey = key.slice('custom.'.length);
-            result = precomputed?.custom?.[customKey] || null;
-        } else {
-            result = precomputed?.[key] || null;
+    function findFirstPrecomputedResult(container) {
+        if (!container || typeof container !== 'object') return null;
+        if (looksLikePrecomputedResult(container)) return container;
+
+        const keys = Object.keys(container);
+        for (const key of keys) {
+            const val = container[key];
+            if (looksLikePrecomputedResult(val)) return val;
         }
 
+        // One more level for common wrapped shapes like { custom: { date: {...} } }
+        for (const key of keys) {
+            const val = container[key];
+            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                const nested = findFirstPrecomputedResult(val);
+                if (nested) return nested;
+            }
+        }
+
+        return null;
+    }
+
+    function resolvePrecomputedResultForCurrentSelection(precomputedSunlight) {
+        if (!precomputedSunlight || typeof precomputedSunlight !== 'object') return null;
+
+        // Accept payloads where precomputedSunlight itself is the result.
+        if (looksLikePrecomputedResult(precomputedSunlight)) {
+            return precomputedSunlight;
+        }
+
+        const key = getPrecomputedKeyForCurrentSelection(precomputedSunlight);
+        if (key) {
+            if (key.startsWith('custom.')) {
+                const customKey = key.slice('custom.'.length);
+                return precomputedSunlight?.custom?.[customKey] || null;
+            }
+            return precomputedSunlight?.[key] || null;
+        }
+
+        // Fallback for unknown schemas: pick first valid precomputed result.
+        return findFirstPrecomputedResult(precomputedSunlight);
+    }
+
+    function tryApplyPrecomputedForCurrentSelection(data) {
+        const precomputed = data?.precomputedSunlight;
+        const result = resolvePrecomputedResultForCurrentSelection(precomputed);
+
         if (!result) return false;
-        applyPrecomputedResults(result);
-        return true;
+        try {
+            applyPrecomputedResults(result);
+            return true;
+        } catch (err) {
+            console.warn('应用预计算日照数据失败:', err);
+            return false;
+        }
     }
 
     async function saveJsonWithDialog(content, filename) {
@@ -1526,6 +1588,7 @@
             clearSunlightResults();
             hideImportUI();
             tryApplyPrecomputedForCurrentSelection(data);
+            setEmptyStateVisible(!hasBuildingsData(data));
             return true;
         } catch (err) {
             console.log('未检测到 data/project.json，使用手动导入模式');
@@ -1911,8 +1974,10 @@
         sunLight.shadow.camera.bottom = -sd;
         sunLight.shadow.camera.far = Math.max(1500, sd * 5);
 
-        scene.fog.near = Math.max(120, maxSize * 0.8);
-        scene.fog.far = Math.max(900, maxSize * 6);
+        if (scene.fog) {
+            scene.fog.near = Math.max(120, maxSize * 0.8);
+            scene.fog.far = Math.max(900, maxSize * 6);
+        }
     }
 
     function applyVisibilityFilter(shouldFit = true) {
@@ -2390,8 +2455,7 @@
             currentData = DEFAULT_DATA;
             applyLocationFromData(DEFAULT_DATA);
             loadBuildings(DEFAULT_DATA);
-            const hasDefaultBuildings = Array.isArray(DEFAULT_DATA.buildings) && DEFAULT_DATA.buildings.length > 0;
-            setEmptyStateVisible(!hasDefaultBuildings);
+            setEmptyStateVisible(!hasBuildingsData(DEFAULT_DATA));
         } else {
             console.log('未检测到 DEFAULT_DATA 变量，等待手动上传文件');
             setEmptyStateVisible(true);
@@ -2556,7 +2620,11 @@
         };
 
         const currentLang = i18n.getCurrentLanguage();
-        let seasonName = seasonNames[currentLang][results.declination.toString()];
+        const decl = Number(results?.declination);
+        let seasonName = null;
+        if (isFinite(decl)) {
+            seasonName = seasonNames[currentLang][decl.toString()];
+        }
 
         // 如果是自定义日期，显示具体日期
         if (!seasonName) {

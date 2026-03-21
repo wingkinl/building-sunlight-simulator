@@ -1460,6 +1460,18 @@
             return precomputedSunlight?.[key] || null;
         }
 
+        // 如果用户选择了特定日期（seasonSelect 不是 custom 或 customDateInput 有值），
+        // 且未找到匹配的预计算数据，则不应使用回退数据，而应返回 null 以清空结果。
+        const seasonSelect = document.getElementById('seasonSelect');
+        const seasonValue = seasonSelect?.value;
+        const isCustom = seasonValue === 'custom';
+        const customDateInput = document.getElementById('customDateInput');
+        const customDateValue = customDateInput?.value;
+
+        if (seasonValue || (isCustom && customDateValue)) {
+            return null;
+        }
+
         // Fallback for unknown schemas: pick first valid precomputed result.
         return findFirstPrecomputedResult(precomputedSunlight);
     }
@@ -1468,6 +1480,9 @@
         const precomputed = data?.precomputedSunlight;
         const result = resolvePrecomputedResultForCurrentSelection(precomputed);
 
+        // 更新计算按钮的显示状态：如果有匹配的预计算数据，则隐藏按钮
+        updateCalcButtonVisibility(data);
+
         if (!result) return false;
         try {
             applyPrecomputedResults(result);
@@ -1475,6 +1490,35 @@
         } catch (err) {
             console.warn('应用预计算日照数据失败:', err);
             return false;
+        }
+    }
+
+    /**
+     * 根据当前选择的日期和预计算数据，更新“计算日照时长”按钮的显示状态。
+     * 如果当前日期已有预计算数据，则隐藏按钮。
+     */
+    function updateCalcButtonVisibility(data) {
+        const btn = document.getElementById('calcSunlightBtn');
+        if (!btn) return;
+
+        const precomputed = data?.precomputedSunlight;
+        if (!precomputed || typeof precomputed !== 'object') {
+            btn.style.display = 'block';
+            return;
+        }
+
+        // 如果 precomputedSunlight 本身就是一个结果（单一日期模式）
+        if (looksLikePrecomputedResult(precomputed)) {
+            btn.style.display = 'none';
+            return;
+        }
+
+        // 检查当前选择的日期是否有匹配的预计算数据
+        const key = getPrecomputedKeyForCurrentSelection(precomputed);
+        if (key) {
+            btn.style.display = 'none';
+        } else {
+            btn.style.display = 'block';
         }
     }
 
@@ -2533,6 +2577,7 @@
             currentData = DEFAULT_DATA;
             applyLocationFromData(DEFAULT_DATA);
             loadBuildings(DEFAULT_DATA);
+            tryApplyPrecomputedForCurrentSelection(DEFAULT_DATA);
             setEmptyStateVisible(!hasBuildingsData(DEFAULT_DATA));
         } else {
             console.log('未检测到 DEFAULT_DATA 变量，等待手动上传文件');

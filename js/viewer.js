@@ -206,6 +206,9 @@
     let showHeatmap = false;
     let currentColormap = 'classic'; // 'classic' 或 'rainbow'
     let simplifiedMode = false; // true when data/project.json was auto-loaded
+    let heatmapInstancedMesh = null;
+    let heatmapPointsData = [];
+    let heatmapHighlightMesh = null;
 
     const HEATMAP_COLORMAPS = {
         classic: [
@@ -1314,14 +1317,17 @@
      * 更新已存在热力图的所有颜色
      */
     function updateHeatmapLayerColors() {
-        if (!sunlightResults) return;
+        if (!sunlightResults || !heatmapInstancedMesh) return;
         const maxHours = CONFIG.SUNLIGHT_ANALYSIS.MAX_HOURS;
-        heatmapGroup.children.forEach(mesh => {
-            if (mesh.userData && mesh.userData.type === 'heatmapCell') {
-                const hours = mesh.userData.sunlightHours;
-                mesh.material.color.copy(getSunlightColor(hours, maxHours));
-            }
-        });
+        const count = heatmapPointsData.length;
+        for (let i = 0; i < count; i++) {
+            const point = heatmapPointsData[i];
+            if (!point) continue;
+            heatmapInstancedMesh.setColorAt(i, getSunlightColor(point.sunlightHours, maxHours));
+        }
+        if (heatmapInstancedMesh.instanceColor) {
+            heatmapInstancedMesh.instanceColor.needsUpdate = true;
+        }
     }
 
     function makeApartmentKey(data) {
@@ -1353,49 +1359,50 @@
      */
     function createHeatmapLayer(results) {
         clearGroup(heatmapGroup);
+        heatmapInstancedMesh = null;
+        heatmapPointsData = [];
+        heatmapHighlightMesh = null;
+
         if (!results || !results.points) return;
 
+        const count = results.points.length;
+        const geometry = new THREE.PlaneGeometry(1, 1);
+        const material = new THREE.MeshBasicMaterial({
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: HEATMAP_BASE_OPACITY,
+            depthTest: true,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
+        });
+
+        heatmapInstancedMesh = new THREE.InstancedMesh(geometry, material, count);
+        heatmapInstancedMesh.userData = { type: 'heatmapInstancedMesh' };
+
+        const matrix = new THREE.Matrix4();
         const maxHours = CONFIG.SUNLIGHT_ANALYSIS.MAX_HOURS;
 
-        results.points.forEach(point => {
+        results.points.forEach((point, i) => {
             const building = currentData.buildings[point.buildingIndex];
             if (!building) return;
 
             const floorHeight = building.floorHeight || 3;
             const cellHeight = floorHeight * 0.9;
-
-            const geometry = new THREE.PlaneGeometry(point.cellWidth, cellHeight);
-            const color = getSunlightColor(point.sunlightHours, maxHours);
-            const material = new THREE.MeshBasicMaterial({
-                color: color,
-                side: THREE.DoubleSide,
-                transparent: true,
-                opacity: HEATMAP_BASE_OPACITY,
-                depthTest: true,
-                polygonOffset: true,
-                polygonOffsetFactor: -1,
-                polygonOffsetUnits: -1
-            });
-
-            const mesh = new THREE.Mesh(geometry, material);
-
             const wallHeight = (point.floor - 0.5) * floorHeight;
             const offset = 0.3;
             const nx = point.outward?.x || 0;
             const ny = point.outward?.y || 0;
 
-            mesh.position.set(point.wallDataX + nx * offset, wallHeight, point.wallDataY + ny * offset);
+            const pos = new THREE.Vector3(point.wallDataX + nx * offset, wallHeight, point.wallDataY + ny * offset);
             const up = new THREE.Vector3(0, 1, 0);
             const outward3 = new THREE.Vector3(nx, 0, ny);
 
             let xAxis;
             if (outward3.lengthSq() > 1e-8) {
                 outward3.normalize();
-                // Build a stable basis from the wall normal to avoid gimbal edge cases on E/W facades.
                 xAxis = new THREE.Vector3().crossVectors(up, outward3);
-                if (xAxis.lengthSq() < 1e-8) {
-                    xAxis.set(1, 0, 0);
-                }
+                if (xAxis.lengthSq() < 1e-8) xAxis.set(1, 0, 0);
                 xAxis.normalize();
 
                 const tangent3 = new THREE.Vector3(point.tangent?.x || 1, 0, point.tangent?.y || 0);
@@ -1409,22 +1416,24 @@
             }
 
             const zAxis = new THREE.Vector3().crossVectors(xAxis, up).normalize();
-            const m = new THREE.Matrix4().makeBasis(xAxis, up, zAxis);
-            mesh.setRotationFromMatrix(m);
+            const quat = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, up, zAxis));
+            const scale = new THREE.Vector3(point.cellWidth, cellHeight, 1);
 
-            mesh.userData = {
-                type: 'heatmapCell',
-                buildingName: point.buildingName,
-                floor: point.floor,
-                unit: point.unit,
-                sunlightHours: point.sunlightHours,
-                unitMaxHours: point.unitMaxHours,
+            matrix.compose(pos, quat, scale);
+            heatmapInstancedMesh.setMatrixAt(i, matrix);
+            heatmapInstancedMesh.setColorAt(i, getSunlightColor(point.sunlightHours, maxHours));
+
+            heatmapPointsData[i] = {
+                ...point,
                 apartmentKey: makeApartmentKey(point),
-                baseOpacity: HEATMAP_BASE_OPACITY
+                matrix: matrix.clone()
             };
-
-            heatmapGroup.add(mesh);
         });
+
+        heatmapInstancedMesh.instanceMatrix.needsUpdate = true;
+        if (heatmapInstancedMesh.instanceColor) heatmapInstancedMesh.instanceColor.needsUpdate = true;
+
+        heatmapGroup.add(heatmapInstancedMesh);
     }
 
     /**
@@ -1896,6 +1905,9 @@
     function clearSunlightResults() {
         sunlightResults = null;
         clearGroup(heatmapGroup);
+        heatmapInstancedMesh = null;
+        heatmapPointsData = [];
+        heatmapHighlightMesh = null;
         document.getElementById('toggleHeatmap').checked = false;
         document.getElementById('toggleHeatmap').disabled = true;
         document.getElementById('heatmapLegend').style.display = 'none';
@@ -2336,7 +2348,8 @@
 
         if (heatHits.length > 0) {
             const obj = heatHits[0].object;
-            if (obj.userData.type === 'heatmapCell') {
+            // InstancedMesh hits are already normalized to include userData in collectHeatmapHits
+            if (obj.userData) {
                 showUnitInfo(obj.userData);
             }
         }
@@ -2350,15 +2363,32 @@
 
     function findCellByApartmentKey(apartmentKey) {
         if (!apartmentKey) return null;
-        for (const child of heatmapGroup.children) {
-            if (!child?.isMesh || child.userData?.type !== 'heatmapCell') continue;
-            if (child.userData.apartmentKey === apartmentKey) return child;
+        const idx = heatmapPointsData.findIndex(p => p.apartmentKey === apartmentKey);
+        if (idx !== -1) {
+            return { userData: heatmapPointsData[idx], instanceId: idx };
         }
         return null;
     }
 
     function collectHeatmapHits(intersections) {
-        return intersections.filter(it => it?.object?.userData?.type === 'heatmapCell');
+        const hits = [];
+        intersections.forEach(it => {
+            if (it.object.userData.type === 'heatmapInstancedMesh' && it.instanceId !== undefined) {
+                const data = heatmapPointsData[it.instanceId];
+                if (data) {
+                    hits.push({
+                        ...it,
+                        object: {
+                            ...it.object,
+                            userData: data
+                        }
+                    });
+                }
+            } else if (it.object.userData.type === 'heatmapCell') {
+                hits.push(it);
+            }
+        });
+        return hits;
     }
 
     function pickApartmentKeyFromAmbiguousEdge(heatHits) {
@@ -2395,16 +2425,31 @@
     function setHoveredApartment(apartmentKey) {
         if (apartmentKey === lastHoveredApartmentKey) return;
 
-        for (const child of heatmapGroup.children) {
-            if (!child?.isMesh || child.userData?.type !== 'heatmapCell') continue;
-            const isTarget = apartmentKey && child.userData?.apartmentKey === apartmentKey;
-            const targetOpacity = apartmentKey
-                ? (isTarget ? HEATMAP_HIGHLIGHT_OPACITY : (child.userData?.baseOpacity ?? HEATMAP_BASE_OPACITY))
-                : (child.userData?.baseOpacity ?? HEATMAP_BASE_OPACITY);
+        if (heatmapHighlightMesh) {
+            heatmapHighlightMesh.visible = false;
+        }
 
-            if (child.material && child.material.transparent) {
-                child.material.opacity = targetOpacity;
-                child.material.needsUpdate = true;
+        if (apartmentKey) {
+            const cell = findCellByApartmentKey(apartmentKey);
+            if (cell && cell.userData && cell.userData.matrix) {
+                if (!heatmapHighlightMesh) {
+                    const geometry = new THREE.PlaneGeometry(1, 1);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.35,
+                        side: THREE.DoubleSide,
+                        depthTest: true,
+                        polygonOffset: true,
+                        polygonOffsetFactor: -2,
+                        polygonOffsetUnits: -2
+                    });
+                    heatmapHighlightMesh = new THREE.Mesh(geometry, material);
+                    heatmapGroup.add(heatmapHighlightMesh);
+                }
+                heatmapHighlightMesh.matrixAutoUpdate = false;
+                heatmapHighlightMesh.matrix.copy(cell.userData.matrix);
+                heatmapHighlightMesh.visible = true;
             }
         }
 

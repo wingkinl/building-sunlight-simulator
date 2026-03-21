@@ -1060,7 +1060,13 @@
             let bldgSumMax = 0;
 
             for (const pts of bldg.unitsMap.values()) {
-                const unitMaxH = Math.max(...pts.map(p => p.sunlightHours));
+                // Safely calculate max hours even for large point sets
+                let unitMaxH = 0;
+                pts.forEach(p => {
+                    const h = Number(p.sunlightHours);
+                    if (isFinite(h) && h > unitMaxH) unitMaxH = h;
+                });
+                
                 pts.forEach(p => p.unitMaxHours = unitMaxH);
 
                 bldg.minHours = Math.min(bldg.minHours, unitMaxH);
@@ -1073,7 +1079,7 @@
                 sumMaxForAll += unitMaxH;
                 totalUniqUnits++;
 
-                if (unitMaxH < 2) belowStd++;
+                if (unitMaxH < (CONFIG.SUNLIGHT_ANALYSIS.STANDARD_HOURS || 2)) belowStd++;
             }
 
             if (bldg.totalUnits > 0) {
@@ -1450,10 +1456,24 @@
 
     function applyPrecomputedResults(results) {
         if (!results) return;
-        const runtimeResults = isCompactPrecomputedResult(results)
+        let runtimeResults = isCompactPrecomputedResult(results)
             ? inflateCompactPrecomputedResult(results, currentData)
             : results;
         if (!runtimeResults) return;
+
+        // Ensure unitMaxHours is populated even for non-compact or older re-imported results
+        if (Array.isArray(runtimeResults.points) && runtimeResults.points.length > 0) {
+            const first = runtimeResults.points[0];
+            if (first.unitMaxHours === undefined) {
+                runtimeResults = buildSunlightResultsFromPoints(
+                    runtimeResults.points,
+                    runtimeResults.declination,
+                    runtimeResults.latitude,
+                    runtimeResults.timeStep
+                );
+            }
+        }
+
         sunlightResults = runtimeResults;
         document.getElementById('toggleHeatmap').disabled = false;
         document.getElementById('heatmapLegend').style.display = 'block';
@@ -2376,7 +2396,6 @@
                     hits.push({
                         ...it,
                         object: {
-                            ...it.object,
                             userData: data
                         }
                     });
@@ -2829,13 +2848,19 @@
         const color = getSunlightColor(hours, maxHours);
         const colorHex = '#' + color.getHexString();
 
-        const evalHours = data.unitMaxHours !== undefined ? data.unitMaxHours : hours;
+        let evalHours = (data.unitMaxHours !== undefined && data.unitMaxHours !== null) ? data.unitMaxHours : hours;
+        if (isNaN(evalHours)) evalHours = 0;
+        
         let statusText = i18n.t('viewer.statusGood');
         let statusClass = 'good';
-        if (evalHours < 2) {
+
+        const stdBad = CONFIG.SUNLIGHT_ANALYSIS.STANDARD_HOURS || 2.0;
+        const stdWarning = stdBad + 1.0;
+
+        if (evalHours < stdBad) {
             statusText = i18n.t('viewer.statusBad');
             statusClass = 'bad';
-        } else if (evalHours < 3) {
+        } else if (evalHours < stdWarning) {
             statusText = i18n.t('viewer.statusWarning');
             statusClass = 'warning';
         }

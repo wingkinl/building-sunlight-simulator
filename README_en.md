@@ -52,6 +52,9 @@ This repository builds on the original project by <a href="https://github.com/Se
 3. Heatmap rendering across all feasible building facades, not just a single side.
 4. A more compact layout with responsive behavior for mobile devices.
 5. Supoort drag and drop json config file and image files to import them directly.
+6. Support for custom color gradients, including classic (yellow-orange) and multi-color (black-blue-green-red-yellow).
+7. Support showing a simplified demo page when ./data/project.json is present.
+8. Export with Sunlight Analysis in the json which can be later imported to the viewer.
 
 ---
 

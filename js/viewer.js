@@ -204,7 +204,31 @@
     let currentData = null;
     let sunlightResults = null; // 存储日照计算结果
     let showHeatmap = false;
+    let currentColormap = 'classic'; // 'classic' 或 'rainbow'
     let simplifiedMode = false; // true when data/project.json was auto-loaded
+
+    const HEATMAP_COLORMAPS = {
+        classic: [
+            { pos: 0, r: 255, g: 250, b: 205 },   // 淡黄色 - 0小时 (LemonChiffon)
+            { pos: 0.2, r: 255, g: 239, b: 170 }, // 浅黄色
+            { pos: 0.35, r: 255, g: 223, b: 130 }, // 金黄色
+            { pos: 0.5, r: 255, g: 200, b: 90 },  // 橙黄色
+            { pos: 0.65, r: 255, g: 170, b: 60 }, // 浅橙色
+            { pos: 0.8, r: 245, g: 140, b: 40 },  // 橙色
+            { pos: 1, r: 220, g: 100, b: 20 }     // 深橙色 - 8小时及以上
+        ],
+        rainbow: [
+            { pos: 0, r: 0, g: 0, b: 0 },         // 0h - Black
+            { pos: 0.125, r: 0, g: 0, b: 139 },   // 1h - Dark Blue
+            { pos: 0.25, r: 0, g: 128, b: 0 },    // 2h - Green
+            { pos: 0.375, r: 0, g: 206, b: 209 }, // 3h - Cyan
+            { pos: 0.5, r: 128, g: 0, b: 128 },   // 4h - Purple
+            { pos: 0.625, r: 255, g: 0, b: 0 },    // 5h - Red
+            { pos: 0.75, r: 255, g: 140, b: 0 },   // 6h - Orange
+            { pos: 0.875, r: 255, g: 255, b: 0 },  // 7h - Yellow
+            { pos: 1, r: 255, g: 255, b: 204 }    // 8h - Pale Yellow
+        ]
+    };
     let customDeclination = null; // 存储自定义日期的赤纬角
     let hoverOccluderMeshes = [];
     const emptyStateEl = document.getElementById('empty-state');
@@ -1209,16 +1233,13 @@
         const clampedHours = Math.min(hours, maxHours);
         const t = clampedHours / maxHours;
 
-        // 使用温暖色系：从淡黄色到深橙色
-        const colors = [
-            { pos: 0, r: 255, g: 250, b: 205 },   // 淡黄色 - 0小时 (LemonChiffon)
-            { pos: 0.2, r: 255, g: 239, b: 170 }, // 浅黄色
-            { pos: 0.35, r: 255, g: 223, b: 130 }, // 金黄色
-            { pos: 0.5, r: 255, g: 200, b: 90 },  // 橙黄色
-            { pos: 0.65, r: 255, g: 170, b: 60 }, // 浅橙色
-            { pos: 0.8, r: 245, g: 140, b: 40 },  // 橙色
-            { pos: 1, r: 220, g: 100, b: 20 }     // 深橙色 - 8小时及以上
-        ];
+        const colors = HEATMAP_COLORMAPS[currentColormap] || HEATMAP_COLORMAPS.classic;
+
+        if (currentColormap === 'rainbow') {
+            const index = Math.min(Math.floor(clampedHours), colors.length - 1);
+            const c = colors[index];
+            return new THREE.Color(c.r / 255, c.g / 255, c.b / 255);
+        }
 
         // 找到t所在的区间
         let lower = colors[0], upper = colors[colors.length - 1];
@@ -1239,6 +1260,68 @@
         const b = Math.round(lower.b + (upper.b - lower.b) * localT);
 
         return new THREE.Color(r / 255, g / 255, b / 255);
+    }
+
+    /**
+     * 更新图例渐变
+     */
+    function updateLegendGradient() {
+         const legendBar = document.querySelector('.legend-bar');
+         if (!legendBar) return;
+ 
+         const colors = HEATMAP_COLORMAPS[currentColormap] || HEATMAP_COLORMAPS.classic;
+          
+          if (currentColormap === 'rainbow') {
+              // 离散色阶
+              const gradientParts = [];
+              const step = 100 / (colors.length - 1); // Each hour is one band
+              colors.forEach((c, i) => {
+                  const colorStr = `rgb(${c.r}, ${c.g}, ${c.b})`;
+                  if (i === 0) {
+                      gradientParts.push(`${colorStr} 0%`);
+                  }
+                  if (i < colors.length - 1) {
+                      gradientParts.push(`${colorStr} ${(i + 1) * step}%`);
+                      const nextColor = colors[i+1];
+                      const nextColorStr = `rgb(${nextColor.r}, ${nextColor.g}, ${nextColor.b})`;
+                      gradientParts.push(`${nextColorStr} ${(i + 1) * step}%`);
+                  } else {
+                      gradientParts.push(`${colorStr} 100%`);
+                  }
+              });
+              legendBar.style.background = `linear-gradient(90deg, ${gradientParts.join(', ')})`;
+          } else {
+              // 连续色阶
+              const gradientStr = colors.map(c => `rgb(${c.r}, ${c.g}, ${c.b}) ${c.pos * 100}%`).join(', ');
+              legendBar.style.background = `linear-gradient(90deg, ${gradientStr})`;
+          }
+
+        // 更新标签
+        const labelsContainer = document.querySelector('.legend-labels');
+        if (labelsContainer) {
+            labelsContainer.innerHTML = '';
+            const maxHours = CONFIG.SUNLIGHT_ANALYSIS.MAX_HOURS;
+            const step = maxHours / 2;
+            for (let i = 0; i <= 2; i++) {
+                const span = document.createElement('span');
+                span.textContent = `${i * step}h`;
+                labelsContainer.appendChild(span);
+            }
+        }
+    }
+
+    /**
+     * 更新已存在热力图的所有颜色
+     */
+    function updateHeatmapLayerColors() {
+        if (!sunlightResults) return;
+        const maxHours = CONFIG.SUNLIGHT_ANALYSIS.MAX_HOURS;
+        heatmapGroup.children.forEach(mesh => {
+            if (mesh.userData && mesh.userData.type === 'heatmapCell') {
+                const hours = mesh.userData.sunlightHours;
+                mesh.material.color.copy(getSunlightColor(hours, maxHours));
+            }
+        });
     }
 
     function makeApartmentKey(data) {
@@ -1368,6 +1451,7 @@
         sunlightResults = runtimeResults;
         document.getElementById('toggleHeatmap').disabled = false;
         document.getElementById('heatmapLegend').style.display = 'block';
+        updateLegendGradient();
         document.getElementById('toggleHeatmap').checked = true;
         // Precomputed payloads from external pipelines may omit some optional fields.
         // Stats should not block heatmap display.
@@ -2459,6 +2543,7 @@
                     progressText.textContent = i18n.t('viewer.calculationComplete');
                     document.getElementById('toggleHeatmap').disabled = false;
                     document.getElementById('heatmapLegend').style.display = 'block';
+                    updateLegendGradient();
                     showSunlightStats(sunlightResults);
 
                     // 自动显示热力图
@@ -2485,6 +2570,18 @@
         document.getElementById('toggleHeatmap').addEventListener('change', (e) => {
             toggleHeatmap(e.target.checked);
         });
+
+        // 色阶样式切换
+        const colormapSelect = document.getElementById('colormapSelect');
+        if (colormapSelect) {
+            colormapSelect.addEventListener('change', (e) => {
+                currentColormap = e.target.value;
+                updateLegendGradient();
+                if (showHeatmap) {
+                    updateHeatmapLayerColors();
+                }
+            });
+        }
 
         // 关闭户型信息面板
         document.getElementById('closeUnitInfo').addEventListener('click', () => {
@@ -2535,6 +2632,8 @@
                 sidebarToggle.setAttribute('aria-label', i18n.t('common.close'));
             }
         });
+        // 初始化色阶
+        updateLegendGradient();
     }
 
     // ========== 动画循环 ==========

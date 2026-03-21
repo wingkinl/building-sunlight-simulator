@@ -328,9 +328,7 @@ input[type="range"] {
 .legend-bar {
     height: 16px;
     border-radius: 4px;
-    background: linear-gradient(90deg, 
-        #fffacd, #ffefaa, #ffdf82, #ffc85a, 
-        #ffaa3c, #f58c28, #dc6414);
+    /* Background is set dynamically by JS */
 }
 
 .legend-labels {

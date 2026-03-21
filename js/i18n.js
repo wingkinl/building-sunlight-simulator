@@ -68,6 +68,9 @@ const i18n = (function() {
                 calcButton: '🔬 计算日照时长',
                 calculating: '计算中...',
                 showHeatmap: '显示日照热力图',
+                colormap: '色阶样式',
+                colormapClassic: '经典 (黄-橙)',
+                colormapRainbow: '多色 (黑-蓝-绿-红-黄)',
                 
                 // 热力图图例
                 legendHours: ['0h', '4h', '8h'],
@@ -282,6 +285,9 @@ const i18n = (function() {
                 calcButton: '🔬 Calculate Sunlight Duration',
                 calculating: 'Calculating...',
                 showHeatmap: 'Show Sunlight Heatmap',
+                colormap: 'Color Gradient',
+                colormapClassic: 'Classic (Yellow-Orange)',
+                colormapRainbow: 'Multi-color (Black-Blue-Green-Red-Yellow)',
                 
                 // Heatmap legend
                 legendHours: ['0h', '4h', '8h'],

@@ -1925,6 +1925,7 @@
         heatmapInstancedMesh = null;
         heatmapPointsData = [];
         heatmapHighlightMeshes = [];
+        currentUnitInfoData = null;
         document.getElementById('toggleHeatmap').checked = false;
         document.getElementById('toggleHeatmap').disabled = true;
         document.getElementById('heatmapLegend').style.display = 'none';
@@ -2367,6 +2368,7 @@
             const obj = heatHits[0].object;
             // InstancedMesh hits are already normalized to include userData in collectHeatmapHits
             if (obj.userData) {
+                currentUnitInfoData = obj.userData;
                 showUnitInfo(obj.userData);
             }
         }
@@ -2376,7 +2378,7 @@
     const raycasterHover = new THREE.Raycaster();
     const mouseHover = new THREE.Vector2();
     let lastHoveredApartmentKey = null;
-    let lastHoveredCell = null;
+    let currentUnitInfoData = null; // 存储当前显示的户型数据以便在切换语言或重绘时刷新面板
 
     function findCellByApartmentKey(apartmentKey) {
         if (!apartmentKey) return null;
@@ -2480,7 +2482,6 @@
 
     function resetHeatmapHoverState() {
         setHoveredApartment(null);
-        lastHoveredCell = null;
     }
 
     function onCanvasMouseMove(event) {
@@ -2511,9 +2512,9 @@
                     setHoveredApartment(apartmentKey);
 
                     if (changedApartment && selectedObj) {
+                        currentUnitInfoData = selectedObj.userData;
                         showUnitInfo(selectedObj.userData);
                     }
-                    if (selectedObj) lastHoveredCell = selectedObj;
                 }
                 return;
             }
@@ -2653,6 +2654,7 @@
         // 关闭户型信息面板
         document.getElementById('closeUnitInfo').addEventListener('click', () => {
             document.getElementById('unitInfoPanel').style.display = 'none';
+            currentUnitInfoData = null;
         });
 
         // 点击画布（支持触摸和鼠标事件，防止双触发）
@@ -2829,6 +2831,11 @@
         if (sunlightResults) {
             showSunlightStats(sunlightResults);
         }
+
+        // 如果当前有显示的户型信息面板，更新其语言
+        if (currentUnitInfoData) {
+            showUnitInfo(currentUnitInfoData);
+        }
     }
 
     /**
@@ -2840,7 +2847,8 @@
         const title = document.getElementById('unitInfoTitle');
         const esc = Utils.escapeHtml;
 
-        title.textContent = `${data.buildingName}`;
+        // Combine localized "Unit Info" with building name to ensure both are visible and localized
+        title.textContent = `${i18n.t('viewer.unitInfo')} - ${data.buildingName}`;
 
         const hours = data.sunlightHours;
         const maxHours = CONFIG.SUNLIGHT_ANALYSIS.MAX_HOURS;
